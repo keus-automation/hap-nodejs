@@ -4,6 +4,7 @@ import crypto from "crypto";
 import createDebug from "debug";
 import { EventEmitter } from "events";
 import net from "net";
+import { clearTimeout } from "timers";
 import {
   AccessoryJsonObject,
   CharacteristicId,
@@ -291,7 +292,7 @@ export interface ServiceConfigurationChange {
   service: Service;
 }
 
-const enum WriteRequestState {
+export const enum WriteRequestState {
   REGULAR_REQUEST,
   TIMED_WRITE_AUTHENTICATED,
   TIMED_WRITE_REJECTED
@@ -301,7 +302,7 @@ const enum WriteRequestState {
 /**
  * @deprecated Use AccessoryEventTypes instead
  */
-export type EventAccessory = "identify" | "listening" | "service-configurationChange" | "service-characteristic-change";
+ export type EventAccessory = "identify" | "listening" | "service-configurationChange" | "service-characteristic-change"|"get-characteristic-change"| "set-characteristic-change";
 
 export const enum AccessoryEventTypes {
   /**
@@ -330,6 +331,8 @@ export const enum AccessoryEventTypes {
   SERVICE_CHARACTERISTIC_CHANGE = "service-characteristic-change",
   PAIRED = "paired",
   UNPAIRED = "unpaired",
+  GET_CHARACTERISTICS="get-characteristic-change",
+  SET_CHARACTERISTICS="set-characteristic-change",
 
   CHARACTERISTIC_WARNING = "characteristic-warning",
 }
@@ -344,7 +347,8 @@ export declare interface Accessory {
 
   on(event: "paired", listener: () => void): this;
   on(event: "unpaired", listener: () => void): this;
-
+  on(event:"get-characteristic-change",listener:(callback:any, charReq: CharacteristicsReadRequest, connection:HAPConnection)=>void):this;
+  on(event:"set-characteristic-change",listener:(callback:any, writeRequest: CharacteristicsWriteRequest, connection:HAPConnection)=>void):this;
   on(event: "characteristic-warning", listener: (warning: CharacteristicWarning) => void): this;
 
 
@@ -354,6 +358,8 @@ export declare interface Accessory {
 
   emit(event: "service-configurationChange", change: ServiceConfigurationChange): boolean;
   emit(event: "service-characteristic-change", change: AccessoryCharacteristicChange): boolean;
+  emit(event: "get-characteristic-change", callback:any, respChar:CharacteristicsReadRequest,connection:HAPConnection):this;
+  emit(event: "set-characteristic-change", callback:any,  writeRequest: CharacteristicsWriteRequest, connection:HAPConnection):this;
 
   emit(event: "paired"): boolean;
   emit(event: "unpaired"): boolean;
@@ -664,7 +670,7 @@ export class Accessory extends EventEmitter {
     this.enqueueConfigurationUpdate();
   }
 
-  private getCharacteristicByIID(iid: number): Characteristic | undefined {
+  public getCharacteristicByIID(iid: number): Characteristic | undefined {
     for (const service of this.services) {
       const characteristic = service.getCharacteristicByIID(iid);
 
@@ -1454,88 +1460,127 @@ export class Accessory extends EventEmitter {
   private handleGetCharacteristics(connection: HAPConnection, request: CharacteristicsReadRequest, callback: ReadCharacteristicsCallback): void {
     const characteristics: CharacteristicReadData[] = [];
     const response: CharacteristicsReadResponse = { characteristics: characteristics };
-
-    const missingCharacteristics: Set<EventName> = new Set(request.ids.map(id => id.aid + "." + id.iid));
-    if (missingCharacteristics.size !== request.ids.length) {
-      // if those sizes differ, we have duplicates and can't properly handle that
-      callback({ httpCode: HAPHTTPCode.UNPROCESSABLE_ENTITY, status: HAPStatus.INVALID_VALUE_IN_REQUEST });
-      return;
-    }
-
-    let timeout: NodeJS.Timeout | undefined = setTimeout(() => {
-      for (const id of missingCharacteristics) {
-        const split = id.split(".");
-        const aid = parseInt(split[0], 10);
-        const iid = parseInt(split[1], 10);
-
-        const accessory = this.getAccessoryByAID(aid)!;
-        const characteristic = accessory.getCharacteristicByIID(iid)!;
-        this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.SLOW_READ, "The read handler for the characteristic '" +
-          characteristic.displayName + "' on the accessory '" + accessory.displayName + "' was slow to respond!");
-      }
-
-      // after a total of 10s we do not longer wait for a request to appear and just return status code timeout
-      timeout = setTimeout(() => {
-        timeout = undefined;
-
-        for (const id of missingCharacteristics) {
-          const split = id.split(".");
-          const aid = parseInt(split[0], 10);
-          const iid = parseInt(split[1], 10);
-
-          const accessory = this.getAccessoryByAID(aid)!;
-          const characteristic = accessory.getCharacteristicByIID(iid)!;
-          this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.TIMEOUT_READ, "The read handler for the characteristic '" +
-            characteristic.displayName + "' on the accessory '" + accessory.displayName + "' didn't respond at all!. " +
-            "Please check that you properly call the callback!");
-
-          characteristics.push({
-            aid: aid,
-            iid: iid,
-            status: HAPStatus.OPERATION_TIMED_OUT,
-          });
-        }
-        missingCharacteristics.clear();
-
-        callback(undefined, response);
-      }, 6000);
-      timeout.unref();
-    }, 3000);
-    timeout.unref();
-
-    for (const id of request.ids) {
-      const name = id.aid + "." + id.iid;
-      this.handleCharacteristicRead(connection, id, request).then(value => {
-        return {
-          aid: id.aid,
-          iid: id.iid,
-          ...value,
-        };
-      }, reason => { // this error block is only called if hap-nodejs itself messed up
-        console.error(`[${this.displayName}] Read request for characteristic ${name} encountered an error: ${reason.stack}`);
-
-        return {
-          aid: id.aid,
-          iid: id.iid,
-          status: HAPStatus.SERVICE_COMMUNICATION_FAILURE,
-        };
-      }).then(value => {
-        if (!timeout) {
-          return; // if timeout is undefined, response was already sent out
-        }
-
-        missingCharacteristics.delete(name);
-        characteristics.push(value);
-
-        if (missingCharacteristics.size === 0) {
-          if (timeout) {
-            clearTimeout(timeout);
-            timeout = undefined;
-          }
-          callback(undefined, response);
-        }
+    console.log("got Sync request")
+    let reqDone=false;
+    let timeout1: NodeJS.Timeout |undefined = setTimeout(()=>{
+      request.ids.forEach((char:any)=>{
+        characteristics.push({
+          aid: char.aid,
+          iid: char.iid,
+          status: HAPStatus.OPERATION_TIMED_OUT,
+        });
       });
-    }
+      if(!reqDone){
+        reqDone=true;
+        callback(undefined, response);
+      }
+        
+    },10000);
+    timeout1?.unref();
+    this.emit(AccessoryEventTypes.GET_CHARACTERISTICS /* LISTENING */, function (chars: CharacteristicReadData[]) {
+      //console.log("val=>"+JSON.stringify(value))
+      console.log("Sync response done")
+      //var characteristicsResp: CharacteristicReadData[]= [];
+      chars.forEach((char) => {
+        characteristics.push(char);
+      });
+      response.characteristics=chars;
+       //do not send response again if request is already done
+     
+       if (timeout1) {
+        clearTimeout(timeout1);
+        timeout1 = undefined;
+      }
+      if(!reqDone){
+        reqDone=true;
+        callback(undefined, response);
+      }
+      
+    }, request, connection)
+
+
+    // const missingCharacteristics: Set<EventName> = new Set(request.ids.map(id => id.aid + "." + id.iid));
+    // if (missingCharacteristics.size !== request.ids.length) {
+    //   // if those sizes differ, we have duplicates and can't properly handle that
+    //   callback({ httpCode: HAPHTTPCode.UNPROCESSABLE_ENTITY, status: HAPStatus.INVALID_VALUE_IN_REQUEST });
+    //   return;
+    // }
+
+    // let timeout: NodeJS.Timeout | undefined = setTimeout(() => {
+    //   for (const id of missingCharacteristics) {
+    //     const split = id.split(".");
+    //     const aid = parseInt(split[0], 10);
+    //     const iid = parseInt(split[1], 10);
+
+    //     const accessory = this.getAccessoryByAID(aid)!;
+    //     const characteristic = accessory.getCharacteristicByIID(iid)!;
+    //     this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.SLOW_READ, "The read handler for the characteristic '" +
+    //       characteristic.displayName + "' on the accessory '" + accessory.displayName + "' was slow to respond!");
+    //   }
+
+    //   // after a total of 10s we do not longer wait for a request to appear and just return status code timeout
+    //   timeout = setTimeout(() => {
+    //     timeout = undefined;
+
+    //     for (const id of missingCharacteristics) {
+    //       const split = id.split(".");
+    //       const aid = parseInt(split[0], 10);
+    //       const iid = parseInt(split[1], 10);
+
+    //       const accessory = this.getAccessoryByAID(aid)!;
+    //       const characteristic = accessory.getCharacteristicByIID(iid)!;
+    //       this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.TIMEOUT_READ, "The read handler for the characteristic '" +
+    //         characteristic.displayName + "' on the accessory '" + accessory.displayName + "' didn't respond at all!. " +
+    //         "Please check that you properly call the callback!");
+
+    //       characteristics.push({
+    //         aid: aid,
+    //         iid: iid,
+    //         status: HAPStatus.OPERATION_TIMED_OUT,
+    //       });
+    //     }
+    //     missingCharacteristics.clear();
+
+    //     callback(undefined, response);
+    //   }, 6000);
+    //   timeout.unref();
+    // }, 3000);
+    // timeout.unref();
+
+
+    // for (const id of request.ids) {
+    //   const name = id.aid + "." + id.iid;
+    //   this.handleCharacteristicRead(connection, id, request).then(value => {
+    //     return {
+    //       aid: id.aid,
+    //       iid: id.iid,
+    //       ...value,
+    //     };
+    //   }, reason => { // this error block is only called if hap-nodejs itself messed up
+    //     console.error(`[${this.displayName}] Read request for characteristic ${name} encountered an error: ${reason.stack}`);
+
+    //     return {
+    //       aid: id.aid,
+    //       iid: id.iid,
+    //       status: HAPStatus.SERVICE_COMMUNICATION_FAILURE,
+    //     };
+    //   }).then(value => {
+    //     if (!timeout) {
+    //       return; // if timeout is undefined, response was already sent out
+    //     }
+
+    //     missingCharacteristics.delete(name);
+    //     characteristics.push(value);
+
+    //     if (missingCharacteristics.size === 0) {
+    //       if (timeout) {
+    //         clearTimeout(timeout);
+    //         timeout = undefined;
+    //       }
+    //       callback(undefined, response);
+    //     }
+    //   });
+    // }
   }
 
   private async handleCharacteristicRead(
@@ -1604,109 +1649,135 @@ export class Accessory extends EventEmitter {
 
   private handleSetCharacteristics(connection: HAPConnection, writeRequest: CharacteristicsWriteRequest, callback: WriteCharacteristicsCallback): void {
     debug("[%s] Processing characteristic set: %s", this.displayName, JSON.stringify(writeRequest));
-
-    let writeState: WriteRequestState = WriteRequestState.REGULAR_REQUEST;
-    if (writeRequest.pid !== undefined) { // check for timed writes
-      if (connection.timedWritePid === writeRequest.pid) {
-        writeState = WriteRequestState.TIMED_WRITE_AUTHENTICATED;
-        clearTimeout(connection.timedWriteTimeout!);
-        connection.timedWritePid = undefined;
-        connection.timedWriteTimeout = undefined;
-
-        debug("[%s] Timed write request got acknowledged for pid %d", this.displayName, writeRequest.pid);
-      } else {
-        writeState = WriteRequestState.TIMED_WRITE_REJECTED;
-        debug("[%s] TTL for timed write request has probably expired for pid %d", this.displayName, writeRequest.pid);
-      }
-    }
-
+    console.log("set state request"+JSON.stringify(writeRequest))
     const characteristics: CharacteristicWriteData[] = [];
     const response: CharacteristicsWriteResponse = { characteristics: characteristics };
+    // let writeState: WriteRequestState = WriteRequestState.REGULAR_REQUEST;
+    // if (writeRequest.pid !== undefined) { // check for timed writes
+    //   if (connection.timedWritePid === writeRequest.pid) {
+    //     writeState = WriteRequestState.TIMED_WRITE_AUTHENTICATED;
+    //     clearTimeout(connection.timedWriteTimeout!);
+    //     connection.timedWritePid = undefined;
+    //     connection.timedWriteTimeout = undefined;
 
-    const missingCharacteristics: Set<EventName> = new Set(
-      writeRequest.characteristics
-        .map(characteristic => characteristic.aid + "." + characteristic.iid),
-    );
-    if (missingCharacteristics.size !== writeRequest.characteristics.length) {
-      // if those sizes differ, we have duplicates and can't properly handle that
-      callback({ httpCode: HAPHTTPCode.UNPROCESSABLE_ENTITY, status: HAPStatus.INVALID_VALUE_IN_REQUEST });
-      return;
-    }
+    //     debug("[%s] Timed write request got acknowledged for pid %d", this.displayName, writeRequest.pid);
+    //   } else {
+    //     writeState = WriteRequestState.TIMED_WRITE_REJECTED;
+    //     debug("[%s] TTL for timed write request has probably expired for pid %d", this.displayName, writeRequest.pid);
+    //   }
+    // }
+    this.emit(AccessoryEventTypes.SET_CHARACTERISTICS, function(chars:CharacteristicWriteData[]){
+      console.log("Chars"+chars)
+      chars.forEach(char=>{
+        characteristics.push(char);
+      })
+      response.characteristics=characteristics;
+      console.log(JSON.stringify( response))
+      callback(undefined, response)
+    }, writeRequest, connection)
 
-    let timeout: NodeJS.Timeout | undefined = setTimeout(() => {
-      for (const id of missingCharacteristics) {
-        const split = id.split(".");
-        const aid = parseInt(split[0], 10);
-        const iid = parseInt(split[1], 10);
+    // let writeState: WriteRequestState = WriteRequestState.REGULAR_REQUEST;
+    // if (writeRequest.pid !== undefined) { // check for timed writes
+    //   if (connection.timedWritePid === writeRequest.pid) {
+    //     writeState = WriteRequestState.TIMED_WRITE_AUTHENTICATED;
+    //     clearTimeout(connection.timedWriteTimeout!);
+    //     connection.timedWritePid = undefined;
+    //     connection.timedWriteTimeout = undefined;
 
-        const accessory = this.getAccessoryByAID(aid)!;
-        const characteristic = accessory.getCharacteristicByIID(iid)!;
-        this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.SLOW_WRITE, "The write handler for the characteristic '" +
-          characteristic.displayName + "' on the accessory '" + accessory.displayName + "' was slow to respond!");
-      }
+    //     debug("[%s] Timed write request got acknowledged for pid %d", this.displayName, writeRequest.pid);
+    //   } else {
+    //     writeState = WriteRequestState.TIMED_WRITE_REJECTED;
+    //     debug("[%s] TTL for timed write request has probably expired for pid %d", this.displayName, writeRequest.pid);
+    //   }
+    // }
 
-      // after a total of 10s we do not longer wait for a request to appear and just return status code timeout
-      timeout = setTimeout(() => {
-        timeout = undefined;
+    // const characteristics: CharacteristicWriteData[] = [];
+    // const response: CharacteristicsWriteResponse = { characteristics: characteristics };
 
-        for (const id of missingCharacteristics) {
-          const split = id.split(".");
-          const aid = parseInt(split[0], 10);
-          const iid = parseInt(split[1], 10);
+    // const missingCharacteristics: Set<EventName> = new Set(
+    //   writeRequest.characteristics
+    //     .map(characteristic => characteristic.aid + "." + characteristic.iid),
+    // );
+    // if (missingCharacteristics.size !== writeRequest.characteristics.length) {
+    //   // if those sizes differ, we have duplicates and can't properly handle that
+    //   callback({ httpCode: HAPHTTPCode.UNPROCESSABLE_ENTITY, status: HAPStatus.INVALID_VALUE_IN_REQUEST });
+    //   return;
+    // }
 
-          const accessory = this.getAccessoryByAID(aid)!;
-          const characteristic = accessory.getCharacteristicByIID(iid)!;
-          this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.TIMEOUT_WRITE, "The write handler for the characteristic '" +
-            characteristic.displayName + "' on the accessory '" + accessory.displayName + "' didn't respond at all!. " +
-            "Please check that you properly call the callback!");
+    // let timeout: NodeJS.Timeout | undefined = setTimeout(() => {
+    //   for (const id of missingCharacteristics) {
+    //     const split = id.split(".");
+    //     const aid = parseInt(split[0], 10);
+    //     const iid = parseInt(split[1], 10);
 
-          characteristics.push({
-            aid: aid,
-            iid: iid,
-            status: HAPStatus.OPERATION_TIMED_OUT,
-          });
-        }
-        missingCharacteristics.clear();
+    //     const accessory = this.getAccessoryByAID(aid)!;
+    //     const characteristic = accessory.getCharacteristicByIID(iid)!;
+    //     this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.SLOW_WRITE, "The write handler for the characteristic '" +
+    //       characteristic.displayName + "' on the accessory '" + accessory.displayName + "' was slow to respond!");
+    //   }
 
-        callback(undefined, response);
-      }, 6000);
-      timeout.unref();
-    }, 3000);
-    timeout.unref();
+    //   // after a total of 10s we do not longer wait for a request to appear and just return status code timeout
+    //   timeout = setTimeout(() => {
+    //     timeout = undefined;
 
-    for (const data of writeRequest.characteristics) {
-      const name = data.aid + "." + data.iid;
-      this.handleCharacteristicWrite(connection, data, writeState).then(value => {
-        return {
-          aid: data.aid,
-          iid: data.iid,
-          ...value,
-        };
-      }, reason => { // this error block is only called if hap-nodejs itself messed up
-        console.error(`[${this.displayName}] Write request for characteristic ${name} encountered an error: ${reason.stack}`);
+    //     for (const id of missingCharacteristics) {
+    //       const split = id.split(".");
+    //       const aid = parseInt(split[0], 10);
+    //       const iid = parseInt(split[1], 10);
 
-        return {
-          aid: data.aid,
-          iid: data.iid,
-          status: HAPStatus.SERVICE_COMMUNICATION_FAILURE,
-        };
-      }).then(value => {
-        if (!timeout) {
-          return; // if timeout is undefined, response was already sent out
-        }
+    //       const accessory = this.getAccessoryByAID(aid)!;
+    //       const characteristic = accessory.getCharacteristicByIID(iid)!;
+    //       this.sendCharacteristicWarning(characteristic, CharacteristicWarningType.TIMEOUT_WRITE, "The write handler for the characteristic '" +
+    //         characteristic.displayName + "' on the accessory '" + accessory.displayName + "' didn't respond at all!. " +
+    //         "Please check that you properly call the callback!");
 
-        missingCharacteristics.delete(name);
-        characteristics.push(value);
+    //       characteristics.push({
+    //         aid: aid,
+    //         iid: iid,
+    //         status: HAPStatus.OPERATION_TIMED_OUT,
+    //       });
+    //     }
+    //     missingCharacteristics.clear();
 
-        if (missingCharacteristics.size === 0) { // if everything returned send the response
-          if (timeout) {
-            clearTimeout(timeout);
-            timeout = undefined;
-          }
-          callback(undefined, response);
-        }
-      });
-    }
+    //     callback(undefined, response);
+    //   }, 6000);
+    //   timeout.unref();
+    // }, 3000);
+    // timeout.unref();
+
+    // for (const data of writeRequest.characteristics) {
+    //   const name = data.aid + "." + data.iid;
+    //   this.handleCharacteristicWrite(connection, data, writeState).then(value => {
+    //     return {
+    //       aid: data.aid,
+    //       iid: data.iid,
+    //       ...value,
+    //     };
+    //   }, reason => { // this error block is only called if hap-nodejs itself messed up
+    //     console.error(`[${this.displayName}] Write request for characteristic ${name} encountered an error: ${reason.stack}`);
+
+    //     return {
+    //       aid: data.aid,
+    //       iid: data.iid,
+    //       status: HAPStatus.SERVICE_COMMUNICATION_FAILURE,
+    //     };
+    //   }).then(value => {
+    //     if (!timeout) {
+    //       return; // if timeout is undefined, response was already sent out
+    //     }
+
+    //     missingCharacteristics.delete(name);
+    //     characteristics.push(value);
+
+    //     if (missingCharacteristics.size === 0) { // if everything returned send the response
+    //       if (timeout) {
+    //         clearTimeout(timeout);
+    //         timeout = undefined;
+    //       }
+    //       callback(undefined, response);
+    //     }
+    //   });
+    // }
   }
 
   private async handleCharacteristicWrite(
