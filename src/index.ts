@@ -27,6 +27,8 @@ export * from "./lib/util/tlv";
 export * from "./lib/util/hapStatusError";
 export * from "./lib/util/color-utils";
 export * from "./lib/util/time";
+export * from "./lib/util/eventedhttp"
+export * from "./internal-types";
 
 export * from "./types";
 export const LegacyTypes = legacyTypes;
