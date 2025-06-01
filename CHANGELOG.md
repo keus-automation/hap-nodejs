@@ -12,6 +12,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - AdaptiveLightingController fix & improvement (#1038)
 - Bridged core and core cleanup (#1048)
 - correct log spacing
+- fix: Ensure data is only transmitted on open and ready connections. (#1051)
 
 ### Homebridge Dependencies
 
