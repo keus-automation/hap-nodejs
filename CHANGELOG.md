@@ -2,6 +2,17 @@
 
 All notable changes to `hap-nodejs` will be documented in this file. This project tries to adhere to [Semantic Versioning](http://semver.org/).
 
+## v0.13.0 (Unreleased)
+
+### Changed
+
+- Mitigate event emitter "memory leak" warnings when a significant number of HomeKit camera streaming events occur simultaneously. (#1037)
+
+### Homebridge Dependencies
+
+- `@homebridge/ciao` @ `v1.3.1`
+- `bonjour-hap` @ `v3.9.0`
+
 ## v0.12.3 (2024-10-26)
 
 ### Changed
