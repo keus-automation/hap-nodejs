@@ -11,6 +11,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - Correct the formatting and presentation of some recording-related debug and error logging. (#1040)
 - AdaptiveLightingController fix & improvement (#1038)
 - Bridged core and core cleanup (#1048)
+- correct log spacing
 
 ### Homebridge Dependencies
 
