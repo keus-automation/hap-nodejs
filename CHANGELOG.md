@@ -13,6 +13,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - Bridged core and core cleanup (#1048)
 - correct log spacing
 - fix: Ensure data is only transmitted on open and ready connections. (#1051)
+- Increase snapshot handler warning timeout to 8000ms. (#1055)
 
 ### Homebridge Dependencies
 
