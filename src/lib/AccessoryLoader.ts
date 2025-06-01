@@ -44,7 +44,9 @@ export function parseCharacteristicJSON(json: any): Characteristic {
   if (updateFunc) {
     characteristic.on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
       updateFunc(value);
-      callback && callback();
+      if (callback) {
+        callback();
+      }
     });
   }
 
@@ -169,14 +171,14 @@ export function loadDirectory(dir: string): Accessory[] {
     // "Accessories" are modules that export a single accessory.
     if (suffix === "accessory.js" || suffix === "accessory.ts") {
       debug("Parsing accessory: %s", file);
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const loadedAccessory = require(path.join(dir, file)).accessory;
       accessories.push(loadedAccessory);
     } else if (suffix === "accfactory.js" ||suffix === "accfactory.ts") { // "Accessory Factories" are modules that export an array of accessories.
       debug("Parsing accessory factory: %s", file);
 
       // should return an array of objects { accessory: accessory-json }
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const loadedAccessories = require(path.join(dir, file));
       accessories = accessories.concat(loadedAccessories);
     }

@@ -50,15 +50,6 @@ export const enum AdvertiserEvent {
 /**
  * @group Advertiser
  */
-export declare interface Advertiser {
-  on(event: "updated-name", listener: (name: string) => void): this;
-
-  emit(event: "updated-name", name: string): boolean;
-}
-
-/**
- * @group Advertiser
- */
 export interface ServiceNetworkOptions {
   /**
    * If defined it restricts the service to be advertised on the specified
@@ -91,6 +82,10 @@ export interface ServiceNetworkOptions {
  * @group Advertiser
  */
 export interface Advertiser {
+  on(event: "updated-name", listener: (name: string) => void): this;
+
+  emit(event: "updated-name", name: string): boolean;
+
   initPort(port: number): void;
 
   startAdvertising(): Promise<void>;
