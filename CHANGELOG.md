@@ -15,6 +15,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - fix: Ensure data is only transmitted on open and ready connections. (#1051)
 - Increase snapshot handler warning timeout to 8000ms. (#1055)
 - Cleanup and refactor `getLocalNetworkInterface` and address a potential edge case. (#1056)
+- add constants for `SecuritySystemAlarmType` (#1086)
 
 ### Homebridge Dependencies
 
