@@ -7,6 +7,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 ### Changed
 
 - minor dependency update
+- mark compatible with node v22
 
 ### Homebridge Dependencies
 
