@@ -8,6 +8,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 
 - minor dependency update
 - mark compatible with node v22
+- fix `initWithServices` reference in typedoc
 
 ### Homebridge Dependencies
 
