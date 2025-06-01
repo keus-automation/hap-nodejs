@@ -19,6 +19,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - update hk plist file from `V=880` to `V=886` (#1087)
 - dependency updates, lint and repo maintenance
 - fix OOC errors from `validateUserInput` on steps
+- regenerate documentation for new version
 
 ### Homebridge Dependencies
 
