@@ -10,6 +10,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - fix type issue and fix ts build issue
 - Correct the formatting and presentation of some recording-related debug and error logging. (#1040)
 - AdaptiveLightingController fix & improvement (#1038)
+- Bridged core and core cleanup (#1048)
 
 ### Homebridge Dependencies
 
