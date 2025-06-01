@@ -109,6 +109,8 @@ import type {
   ManagedNetworkEnable,
   ManuallyDisabled,
   Manufacturer,
+  MatterFirmwareRevisionNumber,
+  MatterFirmwareUpdateStatus,
   MaximumTransmitPower,
   MetricsBufferFullState,
   Model,
@@ -1149,6 +1151,14 @@ export class Characteristic extends EventEmitter {
   /**
    * @group Characteristic Definitions
    */
+  public static MatterFirmwareRevisionNumber: typeof MatterFirmwareRevisionNumber;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static MatterFirmwareUpdateStatus: typeof MatterFirmwareUpdateStatus;
+  /**
+   * @group Characteristic Definitions
+   */
   public static MaximumTransmitPower: typeof MaximumTransmitPower;
   /**
    * @group Characteristic Definitions
@@ -1317,14 +1327,17 @@ export class Characteristic extends EventEmitter {
   public static RelativeHumidityHumidifierThreshold: typeof RelativeHumidityHumidifierThreshold;
   /**
    * @group Characteristic Definitions
+   * @deprecated Removed
    */
   public static RelayControlPoint: typeof RelayControlPoint;
   /**
    * @group Characteristic Definitions
+   * @deprecated Removed
    */
   public static RelayEnabled: typeof RelayEnabled;
   /**
    * @group Characteristic Definitions
+   * @deprecated Removed
    */
   public static RelayState: typeof RelayState;
   /**
@@ -1684,18 +1697,22 @@ export class Characteristic extends EventEmitter {
   public static TransmitPower: typeof TransmitPower;
   /**
    * @group Characteristic Definitions
+   * @deprecated Removed
    */
   public static TunnelConnectionTimeout: typeof TunnelConnectionTimeout;
   /**
    * @group Characteristic Definitions
+   * @deprecated Removed
    */
   public static TunneledAccessoryAdvertising: typeof TunneledAccessoryAdvertising;
   /**
    * @group Characteristic Definitions
+   * @deprecated Removed
    */
   public static TunneledAccessoryConnected: typeof TunneledAccessoryConnected;
   /**
    * @group Characteristic Definitions
+   * @deprecated Removed
    */
   public static TunneledAccessoryStateNumber: typeof TunneledAccessoryStateNumber;
   /**

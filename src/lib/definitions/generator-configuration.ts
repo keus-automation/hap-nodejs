@@ -44,7 +44,10 @@ export const CharacteristicDeprecatedNames: Map<string, string> = new Map([ // k
 ]);
 
 export const CharacteristicValidValuesOverride: Map<string, Record<string, string>> = new Map([
+  ["camera-operating-mode-indicator", { "0": "Disable", "1": "Enable" }],
   ["closed-captions", { "0": "Disabled", "1": "Enabled" }],
+  ["event-snapshots-active", { "0": "Disable", "1": "Enable" }],
+  ["homekit-camera-active", { "0": "Off", "1": "On" }],
   ["input-device-type", { "0": "Other", "1": "TV", "2": "Recording", "3": "Tuner", "4": "Playback", "5": "Audio System" }],
   ["input-source-type", { "0": "Other", "1": "Home Screen", "2": "Tuner", "3": "HDMI", "4": "Composite Video", "5": "S Video",
     "6": "Component Video", "7": "DVI", "8": "AirPlay", "9": "USB", "10": "Application" }],
@@ -52,6 +55,7 @@ export const CharacteristicValidValuesOverride: Map<string, Record<string, strin
   ["manually-disabled", { "0": "Enabled", "1": "Disabled" }],
   ["media-state.current", { "0": "Play", "1": "Pause", "2": "Stop", "4": "LOADING", "5": "Interrupted" }],
   ["media-state.target", { "0": "Play", "1": "Pause", "2": "Stop" }],
+  ["periodic-snapshots-active", { "0": "Disable", "1": "Enable" }],
   ["picture-mode", { "0": "Other", "1": "Standard", "2": "Calibrated", "3": "Calibrated Dark", "4": "Vivid", "5": "Game", "6": "Computer", "7": "Custom" }],
   ["power-mode-selection", { "0": "Show", "1": "Hide" }],
   ["recording-audio-active", { "0": "Disable", "1": "Enable" }],
@@ -61,6 +65,7 @@ export const CharacteristicValidValuesOverride: Map<string, Record<string, strin
   ["security-system.alarm-type", { "0": "No Alarm", "1": "Unknown" }],
   ["siri-input-type", { "0": "Push Button Triggered Apple TV" }],
   ["sleep-discovery-mode", { "0": "Not Discoverable", "1": "Always Discoverable" }],
+  ["third-party-camera-active", { "0": "Off", "1": "On" }],
   ["visibility-state.current", { "0": "Shown", "1": "Hidden" }],
   ["visibility-state.target", { "0": "Shown", "1": "Hidden" }],
   ["volume-control-type", { "0": "None", "1": "Relative", "2": "Relative With Current", "3": "Absolute" }],
@@ -139,7 +144,6 @@ export const CharacteristicOverriding: Map<string, (generated: GeneratedCharacte
   }],
   ["third-party-camera-active", generated => {
     generated.format = "uint8";
-
   }],
   ["input-device-type", generated => {
     // @ts-expect-error: undefined access
@@ -187,7 +191,6 @@ export const CharacteristicOverriding: Map<string, (generated: GeneratedCharacte
   ["identifier", generated => {
     generated.minValue = undefined;
   }],
-
   ["access-code-control-point", generated => {
     generated.properties |= PropertyId.WRITE_RESPONSE;
   }],
@@ -203,7 +206,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Diagonal Field Of View",
     className: "DiagonalFieldOfView",
     since: "13.2",
-
     format: "float",
     units: "arcdegrees",
     properties: 3, // notify, paired read
@@ -215,7 +217,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     UUID: "00000037-0000-1000-8000-0026BB765291",
     name: "Version",
     className: "Version",
-
     format: "string",
     properties: 2, // paired read
     maxLength: 64,
@@ -226,7 +227,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Target Air Quality",
     className: "TargetAirQuality",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "uint8",
     properties: 7, // read, write, notify
     minValue: 0,
@@ -243,7 +243,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Target Slat State",
     className: "TargetSlatState",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "uint8",
     properties: 7, // read, write, notify
     minValue: 0,
@@ -253,14 +252,12 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
       "1": "AUTO",
     } as Record<string, string>,
   }],
-
   ["current-time", {
     id: "current-time",
     UUID: "0000009B-0000-1000-8000-0026BB765291",
     name: "Current Time",
     className: "CurrentTime",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "string",
     properties: 6, // read, write
   }],
@@ -270,7 +267,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Day of the Week",
     className: "DayoftheWeek",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "uint8",
     properties: 6, // read, write
     minValue: 1,
@@ -282,18 +278,15 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Time Update",
     className: "TimeUpdate",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "bool",
     properties: 6, // read, write
   }],
-
   ["reachable", {
     id: "reachable",
     UUID: "00000063-0000-1000-8000-0026BB765291",
     name: "Reachable",
     className: "Reachable",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "bool",
     properties: 6, // read, write
   }],
@@ -303,7 +296,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Link Quality",
     className: "LinkQuality",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "uint8",
     properties: 3, // read, notify
     minValue: 1,
@@ -315,7 +307,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Category",
     className: "Category",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "uint16",
     properties: 3, // read, notify
     minValue: 1,
@@ -328,7 +319,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Configure Bridged Accessory Status",
     className: "ConfigureBridgedAccessoryStatus",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "tlv8",
     properties: 3, // read, notify
   }],
@@ -338,7 +328,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Configure Bridged Accessory",
     className: "ConfigureBridgedAccessory",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "tlv8",
     properties: 4,
   }],
@@ -348,7 +337,6 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Discover Bridged Accessories",
     className: "DiscoverBridgedAccessories",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "uint8",
     properties: 7, // read, write, notify
   }],
@@ -358,8 +346,73 @@ export const CharacteristicManualAdditions: Map<string, GeneratedCharacteristic>
     name: "Discovered Bridged Accessories",
     className: "DiscoveredBridgedAccessories",
     deprecatedNotice: "Removed and not used anymore",
-
     format: "uint16",
+    properties: 3, // read, notify
+  }],
+  ["relay-control-point", {
+    id: "relay-control-point",
+    UUID: "0000005E-0000-1000-8000-0026BB765291",
+    name: "Relay Control Point",
+    className: "RelayControlPoint",
+    deprecatedNotice: "Removed",
+    format: "tlv8",
+    properties: 7, // read, write, notify
+  }],
+  ["relay-enabled", {
+    id: "relay-enabled",
+    UUID: "0000005B-0000-1000-8000-0026BB765291",
+    name: "Relay Enabled",
+    className: "RelayEnabled",
+    deprecatedNotice: "Removed",
+    format: "bool",
+    properties: 7, // read, write, notify
+  }],
+  ["relay-state", {
+    id: "relay-state",
+    UUID: "0000005C-0000-1000-8000-0026BB765291",
+    name: "Relay State",
+    className: "RelayState",
+    deprecatedNotice: "Removed",
+    format: "uint8",
+    properties: 3, // read, notify
+    stepValue: 1,
+    minValue: 0,
+    maxValue: 5,
+  }],
+  ["tunnel-connection-timeout", {
+    id: "tunnel-connection-timeout",
+    UUID: "00000061-0000-1000-8000-0026BB765291",
+    name: "Tunnel Connection Timeout",
+    className: "TunnelConnectionTimeout",
+    deprecatedNotice: "Removed",
+    format: "int",
+    properties: 7, // read, write, notify
+  }],
+  ["tunneled-accessory-advertising", {
+    id: "tunneled-accessory-advertising",
+    UUID: "00000060-0000-1000-8000-0026BB765291",
+    name: "Tunneled Accessory Advertising",
+    className: "TunneledAccessoryAdvertising",
+    deprecatedNotice: "Removed",
+    format: "bool",
+    properties: 7, // read, write, notify
+  }],
+  ["tunneled-accessory-connected", {
+    id: "tunneled-accessory-connected",
+    UUID: "00000059-0000-1000-8000-0026BB765291",
+    name: "Tunneled Accessory Connected",
+    className: "TunneledAccessoryConnected",
+    deprecatedNotice: "Removed",
+    format: "bool",
+    properties: 7, // read, write, notify
+  }],
+  ["tunneled-accessory-state-number", {
+    id: "tunneled-accessory-state-number",
+    UUID: "00000058-0000-1000-8000-0026BB765291",
+    name: "Tunneled Accessory State Number",
+    className: "TunneledAccessoryStateNumber",
+    deprecatedNotice: "Removed",
+    format: "int",
     properties: 3, // read, notify
   }],
 ]);
@@ -401,7 +454,6 @@ export const ServiceManualAdditions: Map<string, GeneratedService> = new Map([
     name: "Speaker",
     className: "Speaker",
     since: "10",
-
     requiredCharacteristics: ["mute"],
     optionalCharacteristics: ["active", "volume"],
   }],
@@ -411,7 +463,6 @@ export const ServiceManualAdditions: Map<string, GeneratedService> = new Map([
     name: "Camera Control",
     className: "CameraControl",
     deprecatedNotice: "This service has no usage anymore and will be ignored by iOS",
-
     requiredCharacteristics: ["on"],
     optionalCharacteristics: [
       "horizontal-tilt.current",
@@ -432,29 +483,24 @@ export const ServiceManualAdditions: Map<string, GeneratedService> = new Map([
     name: "Time Information",
     className: "TimeInformation",
     deprecatedNotice: "Removed and not used anymore",
-
     requiredCharacteristics: ["current-time", "day-of-the-week", "time-update"],
     optionalCharacteristics: ["name"],
   }],
-
   ["bridging-state", {
     id: "bridging-state",
     UUID: "00000062-0000-1000-8000-0026BB765291",
     name: "Bridging State",
     className: "BridgingState",
     deprecatedNotice: "Removed and not used anymore",
-
     requiredCharacteristics: ["reachable", "link-quality", "accessory.identifier", "category"],
     optionalCharacteristics: ["name"],
   }],
-
   ["bridge-configuration", {
     id: "bridge-configuration",
     UUID: "000000A1-0000-1000-8000-0026BB765291",
     name: "Bridge Configuration",
     className: "BridgeConfiguration",
     deprecatedNotice: "Removed and not used anymore",
-
     requiredCharacteristics: [
       "configure-bridged-accessory-status",
       "discover-bridged-accessories",
@@ -462,6 +508,32 @@ export const ServiceManualAdditions: Map<string, GeneratedService> = new Map([
       "configure-bridged-accessory",
     ],
     optionalCharacteristics: ["name"],
+  }],
+  ["cloud-relay", {
+    id: "cloud-relay",
+    UUID: "0000005A-0000-1000-8000-0026BB765291",
+    name: "Cloud Relay",
+    className: "CloudRelay",
+    deprecatedNotice: "Removed",
+    requiredCharacteristics: [
+      "relay-control-point",
+      "relay-state",
+      "relay-enabled",
+    ],
+  }],
+  ["tunnel", {
+    id: "tunnel",
+    UUID: "00000056-0000-1000-8000-0026BB765291",
+    name: "Tunnel",
+    className: "Tunnel",
+    deprecatedNotice: "Removed",
+    requiredCharacteristics: [
+      "accessory.identifier",
+      "tunnel-connection-timeout",
+      "tunneled-accessory-advertising",
+      "tunneled-accessory-connected",
+      "tunneled-accessory-state-number",
+    ],
   }],
 ]);
 
@@ -496,7 +568,6 @@ export const CharacteristicSinceInformation: Map<string, string> = new Map([
   ["wake-configuration", "13.4"],
   ["wifi-capabilities", "14"],
   ["wifi-configuration-control", "14"],
-
   ["access-code-control-point", "15"],
   ["access-code-supported-configuration", "15"],
   ["configuration-state", "15"],
@@ -507,7 +578,6 @@ export const CharacteristicSinceInformation: Map<string, string> = new Map([
 
 export const ServiceSinceInformation: Map<string, string> = new Map([
   ["outlet", "13"],
-
   ["access-code", "15"],
   ["nfc-access", "15"],
 ]);

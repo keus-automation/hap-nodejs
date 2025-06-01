@@ -448,9 +448,6 @@ describe("ServiceDefinitions", () => {
       expect(service2.testCharacteristic(Characteristic.Name)).toBe(true);
       expect(service2.getCharacteristic(Characteristic.Name).value).toBe("test name");
       expect(service2.subtype).toBe("test sub type");
-      // noinspection JSDeprecatedSymbols
-
-      new Service.Relay();
     });
   });
 
@@ -1576,9 +1573,6 @@ describe("ServiceDefinitions", () => {
       expect(service2.testCharacteristic(Characteristic.Name)).toBe(true);
       expect(service2.getCharacteristic(Characteristic.Name).value).toBe("test name");
       expect(service2.subtype).toBe("test sub type");
-      // noinspection JSDeprecatedSymbols
-
-      new Service.TunneledBTLEAccessoryService();
     });
   });
 

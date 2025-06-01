@@ -1,5 +1,5 @@
 // THIS FILE IS AUTO-GENERATED - DO NOT MODIFY
-// V=880
+// V=886
 
 import { Access, Characteristic, Formats, Perms, Units } from "../Characteristic";
 
@@ -2173,6 +2173,40 @@ export class Manufacturer extends Characteristic {
 Characteristic.Manufacturer = Manufacturer;
 
 /**
+ * Characteristic "Matter Firmware Revision Number"
+ */
+export class MatterFirmwareRevisionNumber extends Characteristic {
+
+  public static readonly UUID: string = "0000026D-0000-1000-8000-0026BB765291";
+
+  constructor() {
+    super("Matter Firmware Revision Number", MatterFirmwareRevisionNumber.UUID, {
+      format: Formats.UINT32,
+      perms: [Perms.NOTIFY, Perms.PAIRED_READ],
+    });
+    this.value = this.getDefaultValue();
+  }
+}
+Characteristic.MatterFirmwareRevisionNumber = MatterFirmwareRevisionNumber;
+
+/**
+ * Characteristic "Matter Firmware Update Status"
+ */
+export class MatterFirmwareUpdateStatus extends Characteristic {
+
+  public static readonly UUID: string = "0000026E-0000-1000-8000-0026BB765291";
+
+  constructor() {
+    super("Matter Firmware Update Status", MatterFirmwareUpdateStatus.UUID, {
+      format: Formats.TLV8,
+      perms: [Perms.NOTIFY, Perms.PAIRED_READ],
+    });
+    this.value = this.getDefaultValue();
+  }
+}
+Characteristic.MatterFirmwareUpdateStatus = MatterFirmwareUpdateStatus;
+
+/**
  * Characteristic "Maximum Transmit Power"
  * @since iOS 14
  */
@@ -2984,6 +3018,7 @@ Characteristic.RelativeHumidityHumidifierThreshold = RelativeHumidityHumidifierT
 
 /**
  * Characteristic "Relay Control Point"
+ * @deprecated Removed
  */
 export class RelayControlPoint extends Characteristic {
 
@@ -2997,10 +3032,12 @@ export class RelayControlPoint extends Characteristic {
     this.value = this.getDefaultValue();
   }
 }
+// noinspection JSDeprecatedSymbols
 Characteristic.RelayControlPoint = RelayControlPoint;
 
 /**
  * Characteristic "Relay Enabled"
+ * @deprecated Removed
  */
 export class RelayEnabled extends Characteristic {
 
@@ -3014,10 +3051,12 @@ export class RelayEnabled extends Characteristic {
     this.value = this.getDefaultValue();
   }
 }
+// noinspection JSDeprecatedSymbols
 Characteristic.RelayEnabled = RelayEnabled;
 
 /**
  * Characteristic "Relay State"
+ * @deprecated Removed
  */
 export class RelayState extends Characteristic {
 
@@ -3034,6 +3073,7 @@ export class RelayState extends Characteristic {
     this.value = this.getDefaultValue();
   }
 }
+// noinspection JSDeprecatedSymbols
 Characteristic.RelayState = RelayState;
 
 /**
@@ -4829,6 +4869,7 @@ Characteristic.TransmitPower = TransmitPower;
 
 /**
  * Characteristic "Tunnel Connection Timeout"
+ * @deprecated Removed
  */
 export class TunnelConnectionTimeout extends Characteristic {
 
@@ -4842,10 +4883,12 @@ export class TunnelConnectionTimeout extends Characteristic {
     this.value = this.getDefaultValue();
   }
 }
+// noinspection JSDeprecatedSymbols
 Characteristic.TunnelConnectionTimeout = TunnelConnectionTimeout;
 
 /**
  * Characteristic "Tunneled Accessory Advertising"
+ * @deprecated Removed
  */
 export class TunneledAccessoryAdvertising extends Characteristic {
 
@@ -4859,10 +4902,12 @@ export class TunneledAccessoryAdvertising extends Characteristic {
     this.value = this.getDefaultValue();
   }
 }
+// noinspection JSDeprecatedSymbols
 Characteristic.TunneledAccessoryAdvertising = TunneledAccessoryAdvertising;
 
 /**
  * Characteristic "Tunneled Accessory Connected"
+ * @deprecated Removed
  */
 export class TunneledAccessoryConnected extends Characteristic {
 
@@ -4876,10 +4921,12 @@ export class TunneledAccessoryConnected extends Characteristic {
     this.value = this.getDefaultValue();
   }
 }
+// noinspection JSDeprecatedSymbols
 Characteristic.TunneledAccessoryConnected = TunneledAccessoryConnected;
 
 /**
  * Characteristic "Tunneled Accessory State Number"
+ * @deprecated Removed
  */
 export class TunneledAccessoryStateNumber extends Characteristic {
 
@@ -4893,6 +4940,7 @@ export class TunneledAccessoryStateNumber extends Characteristic {
     this.value = this.getDefaultValue();
   }
 }
+// noinspection JSDeprecatedSymbols
 Characteristic.TunneledAccessoryStateNumber = TunneledAccessoryStateNumber;
 
 /**

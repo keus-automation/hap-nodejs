@@ -16,6 +16,7 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - Increase snapshot handler warning timeout to 8000ms. (#1055)
 - Cleanup and refactor `getLocalNetworkInterface` and address a potential edge case. (#1056)
 - add constants for `SecuritySystemAlarmType` (#1086)
+- update hk plist file from `V=880` to `V=886` (#1087)
 
 ### Homebridge Dependencies
 
