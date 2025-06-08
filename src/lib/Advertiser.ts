@@ -82,10 +82,6 @@ export interface ServiceNetworkOptions {
  * @group Advertiser
  */
 export interface Advertiser {
-  on(event: "updated-name", listener: (name: string) => void): this;
-
-  emit(event: "updated-name", name: string): boolean;
-
   initPort(port: number): void;
 
   startAdvertising(): Promise<void>;

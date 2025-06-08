@@ -561,12 +561,6 @@ for (const generated of Object.values(generatedServices)
     if (generated.deprecatedNotice) {
       serviceOutput.write("// noinspection JSDeprecatedSymbols\n");
     }
-    if (generated.className === "CloudRelay") {
-      serviceOutput.write("Service.Relay = CloudRelay;\n");
-    }
-    if (generated.className === "Tunnel") {
-      serviceOutput.write("Service.TunneledBTLEAccessoryService = Tunnel;\n");
-    }
     serviceOutput.write("Service." + generated.className + " = " + generated.className + ";\n\n");
   } catch (error) {
     throw new Error("Error thrown writing service '" + generated.id + "' (" + generated.className + "): " + error.message);
@@ -759,21 +753,6 @@ function rewriteProperties(className: string, properties: [key: string, value: G
     line += "   */\n";
 
     line += "  public static " + key + ": typeof " + value.className + ";";
-
-    if (value.className === "ProtocolInformation") {
-      line += "\n  /**\n" +
-        "   * @group Service Definitions\n" +
-        "   * @deprecated Please use {@link Service.CloudRelay}.\n" +
-        "   */\n" +
-        "  public static Relay: typeof CloudRelay;";
-    }
-    if (value.className === "Tunnel") {
-      line += "\n  /**\n" +
-        "   * @group Service Definitions\n" +
-        "   * @deprecated Please use {@link Service.Tunnel}.\n" +
-        "   */\n" +
-        "  public static TunneledBTLEAccessoryService: typeof Tunnel;";
-    }
     return line;
   });
   lines.splice(startIndex + 1, amount, ...newContentLines); // insert new lines

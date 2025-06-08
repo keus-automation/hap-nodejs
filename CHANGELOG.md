@@ -2,19 +2,25 @@
 
 All notable changes to `hap-nodejs` will be documented in this file. This project tries to adhere to [Semantic Versioning](http://semver.org/).
 
-<<<<<<< HEAD
-## BETA
+## v1.2.0 (Unreleased)
 
 ### Changes
 
 - add constants for `SecuritySystemAlarmType` (#1086)
 - update hk plist file from V=880 to V=886 (#1087)
 - updated dependencies (#1085)
+- fix OOC errors from `validateUserInput` on steps
+- merge branch 'release-0.x' into latest
+- fix some bad merge conflicts from previous commit
 
 ### Homebridge Dependencies
 
 - `@homebridge/ciao` @ `v1.3.0`
 - `bonjour-hap` @ `v3.8.0`
+
+## v1.1.2 (2025-06-04)
+
+*No changes since v1.1.1, just a version bump to trigger a new release.*
 
 ## v1.1.1 (2025-03-11)
 
@@ -88,8 +94,6 @@ All notable changes to `hap-nodejs` will be documented in this file. This projec
 - `@homebridge/ciao` @ `v1.3.0`
 - `bonjour-hap` @ `v3.8.0`
 
-## v0.12.3 (2024-10-25)
-=======
 ## v0.13.1 (2025-06-04)
 
 *No changes since v0.13.0, just a version bump to trigger a new release.*
@@ -126,7 +130,6 @@ _Most of these commits have been backported from the `v1.x` track. None should b
 - `bonjour-hap` @ `v3.9.0`
 
 ## v0.12.3 (2024-10-26)
->>>>>>> release-0.x
 
 ### Changed
 
@@ -136,11 +139,7 @@ _Most of these commits have been backported from the `v1.x` track. None should b
 
 ### Homebridge Dependencies
 
-<<<<<<< HEAD
 - `@homebridge/ciao` @ `v1.3.0`
-=======
-- `@homebridge/ciao` @ `v1.3.1`
->>>>>>> release-0.x
 - `bonjour-hap` @ `v3.8.0`
 
 ## v0.12.2 (2024-05-31)
