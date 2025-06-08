@@ -42,7 +42,6 @@ const debug = createDebug("HAP-NodeJS:Advertiser");
  * @group Utils
  */
 export function HAPLibraryVersion(): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const packageJson = JSON.parse(readFileSync(require.resolve("../package.json"), "utf-8"));
   const { version } = packageJson;
   return version;

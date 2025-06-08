@@ -148,9 +148,11 @@ export interface GeneratedService {
   optionalCharacteristics?: string[];
 }
 
-const plistData = plist.readFileSync(metadataFile);
-const simulatorPlistData = plist.readFileSync(defaultPlist);
-const simulatorMfiPlistData = fs.existsSync(defaultMfiPlist)? plist.readFileSync(defaultMfiPlist): undefined;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const plistData: any = plist.readFileSync(metadataFile);
+const simulatorPlistData: any = plist.readFileSync(defaultPlist);
+const simulatorMfiPlistData: any = fs.existsSync(defaultMfiPlist)? plist.readFileSync(defaultMfiPlist): undefined;
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 if (plistData.SchemaVersion !== 1) {
   console.warn(`Detected unsupported schema version ${plistData.SchemaVersion}!`);

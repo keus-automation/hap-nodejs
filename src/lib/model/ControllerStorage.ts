@@ -184,8 +184,9 @@ export class ControllerStorage {
     this.initialized = true;
 
     // storing data into our local controllerData Record
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    data && data.forEach(saved => this.controllerData[saved.type] = saved.controllerData);
+    if (data) {
+      data.forEach(saved => this.controllerData[saved.type] = saved.controllerData);
+    }
 
     const restoredControllers: ControllerIdentifier[] = [];
     this.trackedControllers.forEach(controller => {
