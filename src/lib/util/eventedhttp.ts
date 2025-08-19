@@ -17,13 +17,20 @@ const debug = createDebug("HAP-NodeJS:EventedHTTPServer");
 const debugCon = createDebug("HAP-NodeJS:EventedHTTPServer:Connection");
 const debugEvents = createDebug("HAP-NodeJS:EventEmitter");
 
+/**
+ * @group HAP Accessory Server
+ */
 export type HAPUsername = string;
+/**
+ * @group HAP Accessory Server
+ */
 export type EventName = string; // "<aid>.<iid>"
 
 /**
  * Simple struct to hold vars needed to support HAP encryption.
+ *
+ * @group Cryptography
  */
-
 export class HAPEncryption {
 
   readonly clientPublicKey: Buffer;
@@ -51,6 +58,9 @@ export class HAPEncryption {
   }
 }
 
+/**
+ * @group HAP Accessory Server
+ */
 export const enum EventedHTTPServerEvent {
   LISTENING = "listening",
   CONNECTION_OPENED = "connection-opened",
@@ -58,6 +68,10 @@ export const enum EventedHTTPServerEvent {
   CONNECTION_CLOSED = "connection-closed",
 }
 
+/**
+ * @group HAP Accessory Server
+ */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface EventedHTTPServer {
 
   on(event: "listening", listener: (port: number, address: string) => void): this;
@@ -88,7 +102,10 @@ export declare interface EventedHTTPServer {
  *
  * Each connection to the main TCP server gets its own internal HTTP server, so we can track ongoing requests/responses
  * for safe event insertion.
+ *
+ * @group HAP Accessory Server
  */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class EventedHTTPServer extends EventEmitter {
 
   private static readonly CONNECTION_TIMEOUT_LIMIT = 16; // if we have more (or equal) # connections we start the timeout
@@ -106,22 +123,11 @@ export class EventedHTTPServer extends EventEmitter {
    */
   private readonly connectionsByUsername: Map<HAPUsername, HAPConnection[]> = new Map();
   private connectionIdleTimeout?: NodeJS.Timeout;
+  private connectionLoggingInterval?: NodeJS.Timeout;
 
   constructor() {
     super();
     this.tcpServer = net.createServer();
-
-    const interval = setInterval(() => {
-      let connectionString = "";
-      for (const connection of this.connections) {
-        if (connectionString) {
-          connectionString += ", ";
-        }
-        connectionString += connection.remoteAddress + ":" + connection.remotePort;
-      }
-      debug("Currently " + this.connections.size + " hap connections open: " + connectionString);
-    }, 60000);
-    interval.unref();
   }
 
   private scheduleNextConnectionIdleTimeout(): void {
@@ -152,11 +158,24 @@ export class EventedHTTPServer extends EventEmitter {
     }
   }
 
+  public address(): AddressInfo {
+    return this.tcpServer.address() as AddressInfo;
+  }
+
   public listen(targetPort: number, hostname?: string): void {
     this.tcpServer.listen(targetPort, hostname, () => {
       const address = this.tcpServer.address() as AddressInfo; // address() is only a string when listening to unix domain sockets
 
       debug("Server listening on %s:%s", address.family === "IPv6"? `[${address.address}]`: address.address, address.port);
+
+      this.connectionLoggingInterval = setInterval(() => {
+        const connectionInformation = [...this.connections]
+          .map(connection => `${connection.remoteAddress}:${connection.remotePort}`)
+          .join(", ");
+        debug("Currently %d hap connections open: %s", this.connections.size, connectionInformation);
+      }, 60_000);
+      this.connectionLoggingInterval.unref();
+
       this.emit(EventedHTTPServerEvent.LISTENING, address.port, address.address);
     });
 
@@ -164,6 +183,16 @@ export class EventedHTTPServer extends EventEmitter {
   }
 
   public stop(): void {
+    if (this.connectionLoggingInterval != null) {
+      clearInterval(this.connectionLoggingInterval);
+      this.connectionLoggingInterval = undefined;
+    }
+
+    if (this.connectionIdleTimeout != null) {
+      clearTimeout(this.connectionIdleTimeout);
+      this.connectionIdleTimeout = undefined;
+    }
+
     this.tcpServer.close();
     for (const connection of this.connections) {
       connection.close();
@@ -177,14 +206,14 @@ export class EventedHTTPServer extends EventEmitter {
 
   /**
    * Send an event notification for given characteristic and changed value to all connected clients.
-   * If {@param originator} is specified, the given {@link HAPConnection} will be excluded from the broadcast.
+   * If `originator` is specified, the given {@link HAPConnection} will be excluded from the broadcast.
    *
    * @param aid - The accessory id of the updated characteristic.
    * @param iid - The instance id of the updated characteristic.
    * @param value - The newly set value of the characteristic.
    * @param originator - If specified, the connection will not get an event message.
    * @param immediateDelivery - The HAP spec requires some characteristics to be delivery immediately.
-   *   Namely, for the {@link ButtonEvent} and the {@link ProgrammableSwitchEvent} characteristics.
+   *   Namely, for the {@link Characteristic.ButtonEvent} and the {@link Characteristic.ProgrammableSwitchEvent} characteristics.
    */
   public broadcastEvent(aid: number, iid: number, value: Nullable<CharacteristicValue>, originator?: HAPConnection, immediateDelivery?: boolean): void {
     for (const connection of this.connections) {
@@ -247,7 +276,17 @@ export class EventedHTTPServer extends EventEmitter {
     }
   }
 
-  public static destroyExistingConnectionsAfterUnpair(initiator: HAPConnection, username: string): void {
+  /**
+   * This method is to be called when a given {@link HAPConnection} performs a request that should result in the disconnection
+   * of all other {@link HAPConnection} with the same {@link HAPUsername}.
+   *
+   * The initiator MUST be in the middle of a http request were the response was not served yet.
+   * Otherwise, the initiator connection might reside in a state where it isn't disconnected and can't make any further requests.
+   *
+   * @param initiator - The connection that requested to disconnect all connections of the same username.
+   * @param username - The username for which all connections shall be closed.
+   */
+  public static destroyExistingConnectionsAfterUnpair(initiator: HAPConnection, username: HAPUsername): void {
     const connections: HAPConnection[] | undefined = initiator.server.connectionsByUsername.get(username);
 
     if (connections) {
@@ -261,6 +300,7 @@ export class EventedHTTPServer extends EventEmitter {
 
 /**
  * @private
+ * @group HAP Accessory Server
  */
 export const enum HAPConnectionState {
   CONNECTING, // initial state, setup is going on
@@ -274,12 +314,19 @@ export const enum HAPConnectionState {
   CLOSED, // dead
 }
 
+/**
+ * @group HAP Accessory Server
+ */
 export const enum HAPConnectionEvent {
   REQUEST = "request",
   AUTHENTICATED = "authenticated",
   CLOSED = "closed",
 }
 
+/**
+ * @group HAP Accessory Server
+ */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface HAPConnection {
   on(event: "request", listener: (request: IncomingMessage, response: ServerResponse) => void): this;
   on(event: "authenticated", listener: (username: HAPUsername) => void): this;
@@ -292,10 +339,13 @@ export declare interface HAPConnection {
 
 /**
  * Manages a single iOS-initiated HTTP connection during its lifetime.
- * @private
+ * @group HAP Accessory Server
  */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class HAPConnection extends EventEmitter {
-
+  /**
+   * @private file-private API
+   */
   readonly server: EventedHTTPServer;
 
   readonly sessionID: SessionIdentifier; // uuid unique to every HAP connection
@@ -325,8 +375,10 @@ export class HAPConnection extends EventEmitter {
   private registeredEvents: Set<EventName> = new Set();
   private eventsTimer?: NodeJS.Timeout;
   private readonly queuedEvents: CharacteristicEventNotification[] = [];
-  // queue of unencrypted event data waiting to be sent until after an in-progress HTTP response is being written
-  private readonly pendingEventData: Buffer[] = [];
+  /**
+   * If true, the above {@link queuedEvents} contains events which are set to be delivered immediately!
+   */
+  private eventsQueuedForImmediateDelivery = false;
 
   timedWritePid?: number;
   timedWriteTimeout?: NodeJS.Timeout;
@@ -336,7 +388,7 @@ export class HAPConnection extends EventEmitter {
 
     this.server = server;
     this.sessionID = uuid.generate(clientSocket.remoteAddress + ":" + clientSocket.remotePort);
-    this.localAddress = clientSocket.localAddress;
+    this.localAddress = clientSocket.localAddress as string;
     this.remoteAddress = clientSocket.remoteAddress!; // cache because it becomes undefined in 'onClientSocketClose'
     this.remotePort = clientSocket.remotePort!;
     this.networkInterface = HAPConnection.getLocalNetworkInterface(clientSocket);
@@ -448,6 +500,7 @@ export class HAPConnection extends EventEmitter {
     const eventName = aid + "." + iid;
 
     if (!this.registeredEvents.has(eventName)) {
+      // non verified connections can't register events, so this case is covered!
       return;
     }
 
@@ -461,9 +514,11 @@ export class HAPConnection extends EventEmitter {
       // some characteristics are required to deliver notifications immediately
       // we will flush all other events too, on that occasion.
       this.queuedEvents.push(event);
+      this.eventsQueuedForImmediateDelivery = true;
 
       if (this.eventsTimer) {
         clearTimeout(this.eventsTimer);
+        this.eventsTimer = undefined;
       }
       this.handleEventsTimeout();
       return;
@@ -485,9 +540,8 @@ export class HAPConnection extends EventEmitter {
 
     this.queuedEvents.push(event);
 
-    // if we are handling a request or there is already a timer running we just add it in the queue.
-    // remember: we flush the event queue after we send out the response.
-    if (!this.handlingRequest && !this.eventsTimer) {
+    // if there is already a timer running we just add it in the queue.
+    if (!this.eventsTimer) {
       this.eventsTimer = setTimeout(this.handleEventsTimeout.bind(this), 250);
       this.eventsTimer.unref();
     }
@@ -495,25 +549,23 @@ export class HAPConnection extends EventEmitter {
 
   private handleEventsTimeout(): void {
     this.eventsTimer = undefined;
-    if (this.state > HAPConnectionState.AUTHENTICATED || this.handlingRequest) {
+    if (this.state > HAPConnectionState.AUTHENTICATED) {
       // connection is closed or about to be closed. no need to send any further events
-      // OR we are currently sending a response
       return;
     }
 
     this.writeQueuedEventNotifications();
   }
 
-  private writePendingEventNotifications(): void {
-    for (const buffer of this.pendingEventData) {
-      this.tcpSocket.write(this.encrypt(buffer));
-    }
-    this.pendingEventData.splice(0, this.pendingEventData.length);
-  }
-
   private writeQueuedEventNotifications(): void {
-    if (this.queuedEvents.length === 0 || this.eventsTimer) {
-      return; // don't send empty event notifications or if there is a timeout running
+    if (this.queuedEvents.length === 0 || this.handlingRequest) {
+      return; // don't send empty event notifications or if we are currently handling a request
+    }
+
+    if (this.eventsTimer) {
+      // this method might be called when we have enqueued data AND data that is queued for immediate delivery!
+      clearTimeout(this.eventsTimer);
+      this.eventsTimer = undefined;
     }
 
     const eventData: EventNotification = {
@@ -529,6 +581,7 @@ export class HAPConnection extends EventEmitter {
     }
 
     this.queuedEvents.splice(0, this.queuedEvents.length);
+    this.eventsQueuedForImmediateDelivery = false;
 
     this.writeEventNotification(eventData);
   }
@@ -542,6 +595,7 @@ export class HAPConnection extends EventEmitter {
    */
   private writeEventNotification(notification: EventNotification): void {
     debugCon("[%s] Sending HAP event notifications %o", this.remoteAddress, notification.characteristics);
+    assert(!this.handlingRequest, "Can't write event notifications while handling a request!");
 
     // Apple backend processes events in reverse order, so we need to reverse the array
     // so that events are processed in chronological order.
@@ -557,12 +611,7 @@ export class HAPConnection extends EventEmitter {
     );
 
     const buffer = Buffer.concat([header, dataBuffer]);
-    if (this.handlingRequest) {
-      // it is important that we not encrypt the pending event data. This would increment the nonce used in encryption
-      this.pendingEventData.push(buffer);
-    } else {
-      this.tcpSocket.write(this.encrypt(buffer), this.handleTCPSocketWriteFulfilled.bind(this));
-    }
+    this.tcpSocket.write(this.encrypt(buffer), this.handleTCPSocketWriteFulfilled.bind(this));
   }
 
   public enableEventNotifications(aid: number, iid: number): void {
@@ -698,8 +747,11 @@ export class HAPConnection extends EventEmitter {
     if (this.state === HAPConnectionState.TO_BE_TEARED_DOWN) {
       setTimeout(() => this.close(), 10);
     } else if (this.state < HAPConnectionState.TO_BE_TEARED_DOWN) {
-      this.writePendingEventNotifications();
-      this.writeQueuedEventNotifications();
+      if (!this.eventsTimer || this.eventsQueuedForImmediateDelivery) {
+        // we deliver events if there is no eventsTimer (meaning it ran out in the meantime)
+        // or when the queue contains events set to be delivered immediately
+        this.writeQueuedEventNotifications();
+      }
     }
   }
 
@@ -755,78 +807,85 @@ export class HAPConnection extends EventEmitter {
   }
 
   public getLocalAddress(ipVersion: "ipv4" | "ipv6"): string {
-    const infos = os.networkInterfaces()[this.networkInterface];
-
-    if (ipVersion === "ipv4") {
-      for (const info of infos) {
-        // @ts-expect-error Nodejs 18+ uses the number 4 the string "IPv4"
-        if (info.family === "IPv4" || info.family === 4) {
-          return info.address;
-        }
-      }
-
+    const interfaceDetails = os.networkInterfaces()[this.networkInterface];
+    if (!interfaceDetails) {
       throw new Error("Could not find " + ipVersion + " address for interface " + this.networkInterface);
-    } else {
-      let localUniqueAddress: string | undefined = undefined;
+    }
 
-      for (const info of infos) {
-        // @ts-expect-error Nodejs 18+ uses the number 6 instead of the string "IPv6"
-        if (info.family === "IPv6" || info.family === 6) {
-          if (!info.scopeid) {
-            return info.address;
-          } else if (!localUniqueAddress) {
-            localUniqueAddress = info.address;
-          }
-        }
+    // Find our first local IPv4 address.
+    if (ipVersion === "ipv4") {
+      const ipv4Info = interfaceDetails.find(info => info.family === "IPv4");
+
+      if (ipv4Info) {
+        return ipv4Info.address;
       }
 
-      if (!localUniqueAddress) {
-        throw new Error("Could not find " + ipVersion + " address for interface " + this.networkInterface);
+      throw new Error("Could not find " + ipVersion + " address for interface " + this.networkInterface + ".");
+    }
+
+    let localUniqueAddress;
+
+    for (const v6entry of interfaceDetails.filter(entry => entry.family === "IPv6")) {
+      if (!v6entry.scopeid) {
+        return v6entry.address;
       }
+
+      localUniqueAddress ??= v6entry.address;
+    }
+
+    if(localUniqueAddress) {
       return localUniqueAddress;
     }
+
+    throw new Error("Could not find " + ipVersion + " address for interface " + this.networkInterface);
   }
 
   private static getLocalNetworkInterface(socket: Socket): string {
+
     let localAddress = socket.localAddress;
 
-    if (localAddress.startsWith("::ffff:")) { // IPv4-Mapped IPv6 Address https://tools.ietf.org/html/rfc4291#section-2.5.5.2
-      localAddress = localAddress.substring(7);
-    } else {
-      const index = localAddress.indexOf("%");
-      if (index !== -1) { // link-local ipv6
-        localAddress = localAddress.substring(0, index);
-      }
-    }
-
+    // Grab the list of network interfaces.
     const interfaces = os.networkInterfaces();
-    for (const [name, infos] of Object.entries(interfaces)) {
-      for (const info of infos) {
-        if (info.address === localAddress) {
-          return name;
-        }
+
+    // Default to the first non-loopback interface we see.
+    const defaultInterface = () => Object.entries(interfaces).find(([, addresses]) => addresses?.some(address => !address.internal))?.[0] ?? "unknown";
+
+    // No local address return our default.
+    if(!localAddress) {
+      return defaultInterface();
+    }
+
+    // Handle IPv4-mapped IPv6 addresses.
+    localAddress = localAddress.replace(/^::ffff:/i, "");
+
+    // Handle edge cases where we have an IPv4-mapped IPv6 address without the requisite prefix.
+    if(/^::(?:\d{1,3}\.){3}\d{1,3}$/.test(localAddress)) {
+      localAddress = localAddress.replace(/^::/, "");
+    }
+
+    // Handle link-local IPv6 addresses.
+    localAddress = localAddress.split("%")[0];
+
+    // Let's find an exact match using the IP.
+    for (const [name, addresses] of Object.entries(interfaces)) {
+      if (addresses?.some(({ address }) => address === localAddress)) {
+        return name;
       }
     }
 
-    // we couldn't map the address from above, we try now to match subnets (see https://github.com/homebridge/HAP-NodeJS/issues/847)
+    // We couldn't find an interface to match the address from above, so we attempt to match subnets (see https://github.com/homebridge/HAP-NodeJS/issues/847).
     const family = net.isIPv4(localAddress)? "IPv4": "IPv6";
-    for (const [name, infos] of Object.entries(interfaces)) {
-      for (const info of infos) {
-        if (info.family !== family) {
-          continue;
-        }
 
-        // check if the localAddress is in the same subnet
-        if (getNetAddress(localAddress, info.netmask) === getNetAddress(info.address, info.netmask)) {
-          return name;
-        }
+    // Let's find a match based on the subnet.
+    for (const [name, addresses] of Object.entries(interfaces)) {
+      if (addresses?.some(entry => entry.family === family && getNetAddress(localAddress, entry.netmask) === getNetAddress(entry.address, entry.netmask))) {
+        return name;
       }
     }
 
-    console.log(`WARNING couldn't map socket coming from remote address ${socket.remoteAddress}:${socket.remotePort} \
-    at local address ${socket.localAddress} to a interface!`);
+    console.log("WARNING: unable to determine which interface to use for socket coming from " + socket.remoteAddress + ":" + socket.remotePort + " to " +
+      socket.localAddress + ".");
 
-    return Object.keys(interfaces)[1]; // just use the first interface after the loopback interface as fallback
+    return defaultInterface();
   }
-
 }

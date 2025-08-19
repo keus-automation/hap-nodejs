@@ -1,14 +1,15 @@
 import assert from "assert";
-import createDebug from "debug";
 import { ChildProcess, spawn } from "child_process";
+import createDebug from "debug";
 import {
   AudioBitrate,
-  AudioSamplerate,
+  AudioCodecConfiguration,
   AudioCodecTypes,
-  HDSProtocolSpecificErrorReason,
+  AudioSamplerate,
   ErrorHandler,
   FrameHandler,
-  SiriAudioStreamProducer, AudioCodecConfiguration,
+  HDSProtocolSpecificErrorReason,
+  SiriAudioStreamProducer,
 } from "..";
 
 const debug = createDebug("HAP-NodeJS:Remote:GStreamer");
@@ -127,7 +128,7 @@ export class GStreamerAudioProducer implements SiriAudioStreamProducer {
         debug("Failed to kill gstreamer process: " + error.message);
       }
     });
-    this.process.stdout.on("data", (data: Buffer) => {
+    this.process.stdout?.on("data", (data: Buffer) => {
       if (!this.running) { // received data after it was closed
         return;
       }
@@ -148,7 +149,7 @@ export class GStreamerAudioProducer implements SiriAudioStreamProducer {
         rms: 0.25, // only way currently to extract rms from gstreamer is by interfacing with the api directly (nodejs c++ submodule could be a solution)
       });
     });
-    this.process.stderr.on("data", data => {
+    this.process.stderr?.on("data", data => {
       debug("GStreamer process reports the following error: " + String(data));
     });
     this.process.on("exit", (code, signal) => {

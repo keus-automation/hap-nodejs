@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import {
   CameraController,
   CameraControllerOptions,
@@ -10,6 +11,7 @@ import {
   StreamRequestCallback,
 } from ".";
 import {
+  AudioBitrate,
   AudioRecordingCodecType,
   AudioRecordingSamplerate,
   AudioStreamingCodecType,
@@ -32,11 +34,10 @@ import { Characteristic } from "../Characteristic";
 import { HDSProtocolSpecificErrorReason } from "../datastream";
 import "../definitions";
 import { HAPStatus } from "../HAPServer";
-import { AudioBitrate } from "./RemoteController";
 
-const IMAGE = Buffer.alloc(64, 0);
+export const MOCK_IMAGE = crypto.randomBytes(64);
 
-const mockStreamingOptions: CameraStreamingOptions = {
+export const mockStreamingOptions: CameraStreamingOptions = {
   supportedCryptoSuites: [SRTPCryptoSuites.AES_CM_128_HMAC_SHA1_80],
   video: {
     codec: {
@@ -66,7 +67,7 @@ const mockStreamingOptions: CameraStreamingOptions = {
   },
 };
 
-const mockRecordingOptions: CameraRecordingOptions = {
+export const mockRecordingOptions: CameraRecordingOptions = {
   prebufferLength: 4000,
   mediaContainerConfiguration: [{
     type: MediaContainerType.FRAGMENTED_MP4,
@@ -88,9 +89,9 @@ const mockRecordingOptions: CameraRecordingOptions = {
   },
 };
 
-class MockDelegate implements CameraStreamingDelegate, CameraRecordingDelegate {
+export class MockDelegate implements CameraStreamingDelegate, CameraRecordingDelegate {
   handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback): void {
-    callback(undefined, IMAGE);
+    callback(undefined, MOCK_IMAGE);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -124,7 +125,7 @@ class MockDelegate implements CameraStreamingDelegate, CameraRecordingDelegate {
   }
 }
 
-function createOptions(
+export function createCameraControllerOptions(
   recordingOptions: CameraRecordingOptions = mockRecordingOptions,
   streamingOptions: CameraStreamingOptions = mockStreamingOptions,
   cameraStreamCount = 2,
@@ -149,7 +150,7 @@ describe("CameraController", () => {
   let controller: CameraController;
 
   beforeEach(() => {
-    controller = new CameraController(createOptions());
+    controller = new CameraController(createCameraControllerOptions());
 
     // basic controller init
     controller.constructServices();
@@ -191,7 +192,7 @@ describe("CameraController", () => {
     });
 
     test("with motion service and doorbell", () => {
-      const doorbell = new DoorbellController(createOptions());
+      const doorbell = new DoorbellController(createCameraControllerOptions());
       doorbell.constructServices();
       doorbell.configureServices();
 
@@ -202,7 +203,7 @@ describe("CameraController", () => {
     test("with motion service and doorbell and override", () => {
       const options = mockRecordingOptions;
       options.overrideEventTriggerOptions = [EventTriggerOption.MOTION];
-      const doorbell = new DoorbellController(createOptions(options));
+      const doorbell = new DoorbellController(createCameraControllerOptions(options));
       doorbell.constructServices();
       doorbell.configureServices();
 
@@ -213,7 +214,7 @@ describe("CameraController", () => {
     test("with motion service and doorbell specified as override", () => {
       const options = mockRecordingOptions;
       options.overrideEventTriggerOptions = [EventTriggerOption.DOORBELL];
-      const camera = new CameraController(createOptions(options));
+      const camera = new CameraController(createCameraControllerOptions(options));
       camera.constructServices();
       camera.configureServices();
 
@@ -230,7 +231,7 @@ describe("CameraController", () => {
 
     test("simple handleSnapshotRequest", async () => {
       const result = controller.handleSnapshotRequest(100, 100, "SomeAccessory", undefined);
-      await expect(result).resolves.toEqual(IMAGE);
+      await expect(result).resolves.toEqual(MOCK_IMAGE);
     });
 
     test("handleSnapshot considering PeriodicSnapshotsActive state", async () => {
@@ -246,7 +247,7 @@ describe("CameraController", () => {
 
       await expect(
         controller.handleSnapshotRequest(100, 100, "SomeAccessory", ResourceRequestReason.EVENT),
-      ).resolves.toEqual(IMAGE);
+      ).resolves.toEqual(MOCK_IMAGE);
     });
 
     test("handleSnapshot considering EventSnapshotsActive state", async () => {
@@ -258,7 +259,7 @@ describe("CameraController", () => {
 
       await expect(
         controller.handleSnapshotRequest(100, 100, "SomeAccessory", ResourceRequestReason.PERIODIC),
-      ).resolves.toEqual(IMAGE);
+      ).resolves.toEqual(MOCK_IMAGE);
 
       await expect(
         controller.handleSnapshotRequest(100, 100, "SomeAccessory", ResourceRequestReason.EVENT),

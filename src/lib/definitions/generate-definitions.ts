@@ -5,7 +5,7 @@ import assert from "assert";
 import { Command } from "commander";
 import fs from "fs";
 import path from "path";
-import plist from "simple-plist";
+import * as plist from "simple-plist";
 import { Access, Characteristic, Formats, Units } from "../Characteristic";
 import { toLongForm } from "../util/uuid";
 import {
@@ -148,9 +148,11 @@ export interface GeneratedService {
   optionalCharacteristics?: string[];
 }
 
-const plistData = plist.readFileSync(metadataFile);
-const simulatorPlistData = plist.readFileSync(defaultPlist);
-const simulatorMfiPlistData = fs.existsSync(defaultMfiPlist)? plist.readFileSync(defaultMfiPlist): undefined;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const plistData: any = plist.readFileSync(metadataFile);
+const simulatorPlistData: any = plist.readFileSync(defaultPlist);
+const simulatorMfiPlistData: any = fs.existsSync(defaultMfiPlist)? plist.readFileSync(defaultMfiPlist): undefined;
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 if (plistData.SchemaVersion !== 1) {
   console.warn(`Detected unsupported schema version ${plistData.SchemaVersion}!`);
@@ -187,8 +189,7 @@ try {
 
   const props: Record<string, PropertyDefinition> = checkDefined(plistData.PlistDictionary.HAP.Properties);
   // noinspection JSUnusedLocalSymbols
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const [id, definition] of Object.entries(props).sort(([a, aDef], [b, bDef]) => aDef.Position - bDef.Position)) {
+  for (const [id, definition] of Object.entries(props).sort(([, aDef], [, bDef]) => aDef.Position - bDef.Position)) {
     const perm = characteristicPerm(id);
     if (perm) {
       const num = 1 << definition.Position;
@@ -348,7 +349,8 @@ for (const generated of Object.values(generatedCharacteristics)
         if (!name) {
           continue;
         }
-        characteristicOutput.write(`  public static readonly ${name} = ${value};\n`);
+        const cleanName = name.replace(/_+$/, ""); // remove any underscores at the end of the name
+        characteristicOutput.write(`  public static readonly ${cleanName} = ${value};\n`);
       }
       characteristicOutput.write("\n");
     }
@@ -653,7 +655,7 @@ function generatePermsString(id: string, propertiesBitMap: number): string {
   }
 
   const result =  perms.join(", ");
-  assert(!result, "perms string cannot be empty (" + propertiesBitMap + ")");
+  assert(!!result, "perms string cannot be empty (" + propertiesBitMap + ")");
   return result;
 }
 
@@ -687,7 +689,7 @@ function rewriteProperties(className: string, properties: [key: string, value: G
 
   for (; i < lines.length; i++) {
     const line = lines[i];
-    if (line === "import {") {
+    if (line === "import type {") {
       importStart = i; // save last import start;
     } else if (line === "} from \"./definitions\";") {
       importEnd = i;
@@ -742,11 +744,13 @@ function rewriteProperties(className: string, properties: [key: string, value: G
       deprecatedNotice = "Please use {@link " + className + "." + value.className + "}." // prepend deprecated notice
         + (deprecatedNotice? " " + deprecatedNotice: "");
     }
+
+    line += "  /**\n";
+    line += "   * @group " + className + " Definitions\n";
     if (deprecatedNotice) {
-      line += "  /**\n";
       line += "   * @deprecated " + deprecatedNotice + "\n";
-      line += "   */\n";
     }
+    line += "   */\n";
 
     line += "  public static " + key + ": typeof " + value.className + ";";
     return line;

@@ -160,12 +160,6 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("Category", () => {
-    it("should be able to construct", () => {
-      new Characteristic.Category();
-    });
-  });
-
   describe("CCAEnergyDetectThreshold", () => {
     it("should be able to construct", () => {
       new Characteristic.CCAEnergyDetectThreshold();
@@ -214,18 +208,6 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("ConfigureBridgedAccessory", () => {
-    it("should be able to construct", () => {
-      new Characteristic.ConfigureBridgedAccessory();
-    });
-  });
-
-  describe("ConfigureBridgedAccessoryStatus", () => {
-    it("should be able to construct", () => {
-      new Characteristic.ConfigureBridgedAccessoryStatus();
-    });
-  });
-
   describe("ConfiguredName", () => {
     it("should be able to construct", () => {
       new Characteristic.ConfiguredName();
@@ -241,6 +223,12 @@ describe("CharacteristicDefinitions", () => {
   describe("CoolingThresholdTemperature", () => {
     it("should be able to construct", () => {
       new Characteristic.CoolingThresholdTemperature();
+    });
+  });
+
+  describe("CryptoHash", () => {
+    it("should be able to construct", () => {
+      new Characteristic.CryptoHash();
     });
   });
 
@@ -328,12 +316,6 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("CurrentTime", () => {
-    it("should be able to construct", () => {
-      new Characteristic.CurrentTime();
-    });
-  });
-
   describe("CurrentTransport", () => {
     it("should be able to construct", () => {
       new Characteristic.CurrentTransport();
@@ -364,12 +346,6 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("DayoftheWeek", () => {
-    it("should be able to construct", () => {
-      new Characteristic.DayoftheWeek();
-    });
-  });
-
   describe("DiagonalFieldOfView", () => {
     it("should be able to construct", () => {
       new Characteristic.DiagonalFieldOfView();
@@ -379,18 +355,6 @@ describe("CharacteristicDefinitions", () => {
   describe("DigitalZoom", () => {
     it("should be able to construct", () => {
       new Characteristic.DigitalZoom();
-    });
-  });
-
-  describe("DiscoverBridgedAccessories", () => {
-    it("should be able to construct", () => {
-      new Characteristic.DiscoverBridgedAccessories();
-    });
-  });
-
-  describe("DiscoveredBridgedAccessories", () => {
-    it("should be able to construct", () => {
-      new Characteristic.DiscoveredBridgedAccessories();
     });
   });
 
@@ -544,12 +508,6 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("LinkQuality", () => {
-    it("should be able to construct", () => {
-      new Characteristic.LinkQuality();
-    });
-  });
-
   describe("ListPairings", () => {
     it("should be able to construct", () => {
       new Characteristic.ListPairings();
@@ -628,9 +586,27 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
+  describe("MatterFirmwareRevisionNumber", () => {
+    it("should be able to construct", () => {
+      new Characteristic.MatterFirmwareRevisionNumber();
+    });
+  });
+
+  describe("MatterFirmwareUpdateStatus", () => {
+    it("should be able to construct", () => {
+      new Characteristic.MatterFirmwareUpdateStatus();
+    });
+  });
+
   describe("MaximumTransmitPower", () => {
     it("should be able to construct", () => {
       new Characteristic.MaximumTransmitPower();
+    });
+  });
+
+  describe("MetricsBufferFullState", () => {
+    it("should be able to construct", () => {
+      new Characteristic.MetricsBufferFullState();
     });
   });
 
@@ -838,12 +814,6 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("Reachable", () => {
-    it("should be able to construct", () => {
-      new Characteristic.Reachable();
-    });
-  });
-
   describe("ReceivedSignalStrengthIndication", () => {
     it("should be able to construct", () => {
       new Characteristic.ReceivedSignalStrengthIndication();
@@ -973,6 +943,12 @@ describe("CharacteristicDefinitions", () => {
   describe("SelectedRTPStreamConfiguration", () => {
     it("should be able to construct", () => {
       new Characteristic.SelectedRTPStreamConfiguration();
+    });
+  });
+
+  describe("SelectedSleepConfiguration", () => {
+    it("should be able to construct", () => {
+      new Characteristic.SelectedSleepConfiguration();
     });
   });
 
@@ -1198,6 +1174,12 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
+  describe("SupportedMetrics", () => {
+    it("should be able to construct", () => {
+      new Characteristic.SupportedMetrics();
+    });
+  });
+
   describe("SupportedRouterConfiguration", () => {
     it("should be able to construct", () => {
       new Characteristic.SupportedRouterConfiguration();
@@ -1207,6 +1189,12 @@ describe("CharacteristicDefinitions", () => {
   describe("SupportedRTPConfiguration", () => {
     it("should be able to construct", () => {
       new Characteristic.SupportedRTPConfiguration();
+    });
+  });
+
+  describe("SupportedSleepConfiguration", () => {
+    it("should be able to construct", () => {
+      new Characteristic.SupportedSleepConfiguration();
     });
   });
 
@@ -1234,15 +1222,15 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("TargetAirPurifierState", () => {
+  describe("TapType", () => {
     it("should be able to construct", () => {
-      new Characteristic.TargetAirPurifierState();
+      new Characteristic.TapType();
     });
   });
 
-  describe("TargetAirQuality", () => {
+  describe("TargetAirPurifierState", () => {
     it("should be able to construct", () => {
-      new Characteristic.TargetAirQuality();
+      new Characteristic.TargetAirPurifierState();
     });
   });
 
@@ -1312,12 +1300,6 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("TargetSlatState", () => {
-    it("should be able to construct", () => {
-      new Characteristic.TargetSlatState();
-    });
-  });
-
   describe("TargetTemperature", () => {
     it("should be able to construct", () => {
       new Characteristic.TargetTemperature();
@@ -1378,9 +1360,9 @@ describe("CharacteristicDefinitions", () => {
     });
   });
 
-  describe("TimeUpdate", () => {
+  describe("Token", () => {
     it("should be able to construct", () => {
-      new Characteristic.TimeUpdate();
+      new Characteristic.Token();
     });
   });
 

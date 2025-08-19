@@ -1,5 +1,6 @@
 import assert from "assert";
 import * as hapCrypto from "../util/hapCrypto";
+
 /**
  * Type Length Value encoding/decoding, used by HAP as a wire format.
  * https://en.wikipedia.org/wiki/Type-length-value
@@ -7,8 +8,14 @@ import * as hapCrypto from "../util/hapCrypto";
 
 const EMPTY_TLV_TYPE = 0x00; // and empty tlv with id 0 is usually used as delimiter for tlv lists
 
+/**
+ * @group TLV8
+ */
 export type TLVEncodable = Buffer | number | string;
 
+/**
+ * @group TLV8
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function encode(type: number, data: TLVEncodable | TLVEncodable[], ...args: any[]): Buffer {
   const encodedTLVBuffers: Buffer[] = [];
@@ -25,10 +32,14 @@ export function encode(type: number, data: TLVEncodable | TLVEncodable[], ...arg
     for (const entry of data) {
       if (!first) {
         encodedTLVBuffers.push(Buffer.from([EMPTY_TLV_TYPE, 0])); // push delimiter
-      } else {
-        first = false;
       }
+
+      first = false;
       encodedTLVBuffers.push(encode(type, entry));
+    }
+
+    if (first) { // we have a zero length array!
+      encodedTLVBuffers.push(Buffer.from([type, 0]));
     }
   } else if (data.length <= 255) {
     encodedTLVBuffers.push(Buffer.concat([Buffer.from([type,data.length]),data]));
@@ -68,8 +79,13 @@ export function encode(type: number, data: TLVEncodable | TLVEncodable[], ...arg
  * Should the decoder encounter multiple instances of the same id, it will just concatenate the buffer data.
  *
  * @param buffer - TLV8 data
+ *
+ * Note: Please use {@link decodeWithLists} which properly decodes list elements.
+ *
+ * @group TLV8
  */
 export function decode(buffer: Buffer): Record<number, Buffer> {
+  assert(buffer instanceof Buffer, "Illegal argument. tlv.decode() expects Buffer type!");
   const objects: Record<number, Buffer> = {};
 
   let leftLength = buffer.length;
@@ -96,6 +112,15 @@ export function decode(buffer: Buffer): Record<number, Buffer> {
   return objects;
 }
 
+/**
+ * Decode a buffer coding TLV8 encoded entries.
+ *
+ * This method decodes multiple entries split by a TLV delimiter properly into Buffer arrays.
+ * It properly reassembles tlv entries if they were split across multiple entries due to exceeding the max tlv entry size of 255 bytes.
+ * @param buffer - The Buffer containing TLV8 encoded data.
+ *
+ * @group TLV8
+ */
 export function decodeWithLists(buffer: Buffer): Record<number, Buffer | Buffer[]> {
   const result: Record<number, Buffer | Buffer[]> = {};
 
@@ -137,8 +162,8 @@ export function decodeWithLists(buffer: Buffer): Record<number, Buffer | Buffer[
           result[type] = Buffer.concat([existing, data]);
         }
       } else {
-        throw new Error(`Found duplicated tlv entry with type ${type} and length ${length} \
-        (lastItemWasDelimiter: ${lastItemWasDelimiter}, lastType: ${lastType}, lastLength: ${lastLength})`);
+        throw new Error(`Found duplicated tlv entry with type ${type} and length ${length} `
+          + `(lastItemWasDelimiter: ${lastItemWasDelimiter}, lastType: ${lastType}, lastLength: ${lastLength})`);
       }
     } else {
       result[type] = data;
@@ -152,6 +177,20 @@ export function decodeWithLists(buffer: Buffer): Record<number, Buffer | Buffer[
   return result;
 }
 
+/**
+ * This method can be used to parse a TLV8 encoded list that was concatenated.
+ *
+ * If you are thinking about using this method, try to refactor the code to use {@link decodeWithLists} instead of {@link decode}.
+ * The single reason of this method's existence are the shortcomings {@link decode}, as it concatenates multiple tlv8 list entries
+ * into a single Buffer.
+ * This method can be used to undo that, by specifying the concatenated buffer and the tlv id of the element that should
+ * mark the beginning of a new tlv8 list entry.
+ *
+ * @param data - The concatenated tlv8 list entries (probably output of {@link decode}).
+ * @param entryStartId - The tlv id that marks the beginning of a new tlv8 entry.
+ *
+ * @group TLV8
+ */
 export function decodeList(data: Buffer, entryStartId: number): Record<number, Buffer>[] {
   const objectsList: Record<number, Buffer>[] = [];
 
@@ -177,8 +216,8 @@ export function decodeList(data: Buffer, entryStartId: number): Record<number, B
       throw new Error("Error parsing tlv list: Encountered uninitialized storage object");
     }
 
-    if (objects[type]) { // append to buffer if we have an already data for this type
-      objects[type] = Buffer.concat([value, objects[type]]);
+    if (objects[type]) { // append to buffer if we have already data for this type
+      objects[type] = Buffer.concat([objects[type], value]);
     } else {
       objects[type] = value;
     }
@@ -194,34 +233,19 @@ export function decodeList(data: Buffer, entryStartId: number): Record<number, B
   return objectsList;
 }
 
-export function writeUInt64(value: number): Buffer {
-  const float64 = new Float64Array(1);
-  float64[0] = value;
-
-  const buffer = Buffer.alloc(float64.buffer.byteLength);
-  const view = new Uint8Array(float64.buffer);
-  for (let i = 0; i < buffer.length; i++) {
-    buffer[i] = view[i];
-  }
-
-  return buffer;
-}
-
-// noinspection JSUnusedGlobalSymbols
 /**
- * @param buffer
- * @deprecated This is pretty much broken
+ * @group TLV8
  */
-export function readUInt64(buffer: Buffer): number {
-  const float64 = new Float64Array(buffer);
-  return float64[0];
-}
-
-export function readUInt64BE(buffer: Buffer, offset = 0): number {
+export function readUInt64LE(buffer: Buffer, offset = 0): number {
   const low = buffer.readUInt32LE(offset);
+  // javascript doesn't allow to shift by 32(?), therefore we multiply here
   return buffer.readUInt32LE(offset + 4) * 0x100000000 + low;
 }
 
+/**
+ * `writeUint32LE`
+ * @group TLV8
+ */
 export function writeUInt32(value: number): Buffer {
   const buffer = Buffer.alloc(4);
 
@@ -230,16 +254,27 @@ export function writeUInt32(value: number): Buffer {
   return buffer;
 }
 
+/**
+ * `readUInt32LE`
+ * @group TLV8
+ */
 export function readUInt32(buffer: Buffer): number {
   return buffer.readUInt32LE(0);
 }
 
+/**
+ * @group TLV8
+ */
 export function writeFloat32LE(value: number): Buffer {
   const buffer = Buffer.alloc(4);
   buffer.writeFloatLE(value, 0);
   return buffer;
 }
 
+/**
+ * `writeUInt16LE`
+ * @group TLV8
+ */
 export function writeUInt16(value: number): Buffer {
   const buffer = Buffer.alloc(2);
 
@@ -248,42 +283,59 @@ export function writeUInt16(value: number): Buffer {
   return buffer;
 }
 
+/**
+ * `readUInt16LE`
+ * @group TLV8
+ */
 export function readUInt16(buffer: Buffer): number {
   return buffer.readUInt16LE(0);
 }
-export function readVariableUIntLE(buffer: Buffer, offset = 0): number {
+
+
+/**
+ * Reads variable size unsigned integer {@link writeVariableUIntLE}.
+ * @param buffer - The buffer to read from. It must have exactly the size of the given integer.
+ * @group TLV8
+ */
+export function readVariableUIntLE(buffer: Buffer): number {
+
   switch (buffer.length) {
   case 1:
-    return buffer.readUInt8(offset);
+    return buffer.readUInt8(0);
   case 2:
-    return buffer.readUInt16LE(offset);
+    return buffer.readUInt16LE(0);
   case 4:
-    return buffer.readUInt32LE(offset);
+    return buffer.readUInt32LE(0);
   case 8:
-    return readUInt64BE(buffer, offset);
+    return readUInt64LE(buffer, 0);
   default:
     throw new Error("Can't read uint LE with length " + buffer.length);
   }
 }
 
-export function writeVariableUIntLE(number: number, offset = 0): Buffer {
+/**
+ * Writes variable size unsigned integer.
+ * Either:
+ * - `UInt8`
+ * - `UInt16LE`
+ * - `UInt32LE`
+ * @param number
+ * @group TLV8
+ */
+export function writeVariableUIntLE(number: number): Buffer {
   assert(number >= 0, "Can't encode a negative integer as unsigned integer");
 
   if (number <= 255) {
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(number, offset);
+    buffer.writeUInt8(number, 0);
     return buffer;
   } else if (number <= 65535) {
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt16LE(number, offset);
-    return buffer;
+    return writeUInt16(number);
   } else if (number <= 4294967295) {
-    const buffer = Buffer.alloc(4);
-    buffer.writeUInt32LE(number, offset);
-    return buffer;
+    return writeUInt32(number);
   } else {
     const buffer = Buffer.alloc(8);
-    hapCrypto.writeUInt64LE(number, buffer, offset);
+    hapCrypto.writeUInt64LE(number, buffer, 0);
     return buffer;
   }
 }

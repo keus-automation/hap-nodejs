@@ -1,5 +1,5 @@
 // THIS FILE IS AUTO-GENERATED - DO NOT MODIFY
-// V=880
+// V=886
 
 import { Characteristic } from "../Characteristic";
 import { Service } from "../Service";
@@ -66,6 +66,7 @@ export class AccessoryInformation extends Service {
     this.addOptionalCharacteristic(Characteristic.AccessoryFlags);
     this.addOptionalCharacteristic(Characteristic.AppMatchingIdentifier);
     this.addOptionalCharacteristic(Characteristic.ConfiguredName);
+    this.addOptionalCharacteristic(Characteristic.MatterFirmwareRevisionNumber);
     this.addOptionalCharacteristic(Characteristic.HardwareFinish);
     this.addOptionalCharacteristic(Characteristic.HardwareRevision);
     this.addOptionalCharacteristic(Characteristic.ProductData);
@@ -86,6 +87,8 @@ export class AccessoryMetrics extends Service {
 
     // Required Characteristics
     this.addCharacteristic(Characteristic.Active);
+    this.addCharacteristic(Characteristic.MetricsBufferFullState);
+    this.addCharacteristic(Characteristic.SupportedMetrics);
   }
 }
 Service.AccessoryMetrics = AccessoryMetrics;
@@ -237,87 +240,7 @@ export class Battery extends Service {
     this.addOptionalCharacteristic(Characteristic.Name);
   }
 }
-// noinspection JSDeprecatedSymbols
-Service.BatteryService = Battery;
 Service.Battery = Battery;
-
-/**
- * Service "Bridge Configuration"
- * @deprecated Removed and not used anymore
- */
-export class BridgeConfiguration extends Service {
-
-  public static readonly UUID: string = "000000A1-0000-1000-8000-0026BB765291";
-
-  constructor(displayName?: string, subtype?: string) {
-    super(displayName, BridgeConfiguration.UUID, subtype);
-
-    // Required Characteristics
-    this.addCharacteristic(Characteristic.ConfigureBridgedAccessoryStatus);
-    this.addCharacteristic(Characteristic.DiscoverBridgedAccessories);
-    this.addCharacteristic(Characteristic.DiscoveredBridgedAccessories);
-    this.addCharacteristic(Characteristic.ConfigureBridgedAccessory);
-
-    // Optional Characteristics
-    this.addOptionalCharacteristic(Characteristic.Name);
-  }
-}
-// noinspection JSDeprecatedSymbols
-Service.BridgeConfiguration = BridgeConfiguration;
-
-/**
- * Service "Bridging State"
- * @deprecated Removed and not used anymore
- */
-export class BridgingState extends Service {
-
-  public static readonly UUID: string = "00000062-0000-1000-8000-0026BB765291";
-
-  constructor(displayName?: string, subtype?: string) {
-    super(displayName, BridgingState.UUID, subtype);
-
-    // Required Characteristics
-    this.addCharacteristic(Characteristic.Reachable);
-    this.addCharacteristic(Characteristic.LinkQuality);
-    this.addCharacteristic(Characteristic.AccessoryIdentifier);
-    this.addCharacteristic(Characteristic.Category);
-
-    // Optional Characteristics
-    this.addOptionalCharacteristic(Characteristic.Name);
-  }
-}
-// noinspection JSDeprecatedSymbols
-Service.BridgingState = BridgingState;
-
-/**
- * Service "Camera Control"
- * @deprecated This service has no usage anymore and will be ignored by iOS
- */
-export class CameraControl extends Service {
-
-  public static readonly UUID: string = "00000111-0000-1000-8000-0026BB765291";
-
-  constructor(displayName?: string, subtype?: string) {
-    super(displayName, CameraControl.UUID, subtype);
-
-    // Required Characteristics
-    this.addCharacteristic(Characteristic.On);
-
-    // Optional Characteristics
-    this.addOptionalCharacteristic(Characteristic.CurrentHorizontalTiltAngle);
-    this.addOptionalCharacteristic(Characteristic.CurrentVerticalTiltAngle);
-    this.addOptionalCharacteristic(Characteristic.TargetHorizontalTiltAngle);
-    this.addOptionalCharacteristic(Characteristic.TargetVerticalTiltAngle);
-    this.addOptionalCharacteristic(Characteristic.NightVision);
-    this.addOptionalCharacteristic(Characteristic.OpticalZoom);
-    this.addOptionalCharacteristic(Characteristic.DigitalZoom);
-    this.addOptionalCharacteristic(Characteristic.ImageRotation);
-    this.addOptionalCharacteristic(Characteristic.ImageMirroring);
-    this.addOptionalCharacteristic(Characteristic.Name);
-  }
-}
-// noinspection JSDeprecatedSymbols
-Service.CameraControl = CameraControl;
 
 /**
  * Service "Camera Operating Mode"
@@ -356,17 +279,15 @@ export class CameraRecordingManagement extends Service {
 
     // Required Characteristics
     this.addCharacteristic(Characteristic.Active);
+    this.addCharacteristic(Characteristic.SelectedCameraRecordingConfiguration);
+    this.addCharacteristic(Characteristic.SupportedAudioRecordingConfiguration);
     this.addCharacteristic(Characteristic.SupportedCameraRecordingConfiguration);
     this.addCharacteristic(Characteristic.SupportedVideoRecordingConfiguration);
-    this.addCharacteristic(Characteristic.SupportedAudioRecordingConfiguration);
-    this.addCharacteristic(Characteristic.SelectedCameraRecordingConfiguration);
 
     // Optional Characteristics
     this.addOptionalCharacteristic(Characteristic.RecordingAudioActive);
   }
 }
-// noinspection JSDeprecatedSymbols
-Service.CameraEventRecordingManagement = CameraRecordingManagement;
 Service.CameraRecordingManagement = CameraRecordingManagement;
 
 /**
@@ -445,6 +366,7 @@ Service.CarbonMonoxideSensor = CarbonMonoxideSensor;
 
 /**
  * Service "Cloud Relay"
+ * @deprecated Removed
  */
 export class CloudRelay extends Service {
 
@@ -460,7 +382,6 @@ export class CloudRelay extends Service {
   }
 }
 // noinspection JSDeprecatedSymbols
-Service.Relay = CloudRelay;
 Service.CloudRelay = CloudRelay;
 
 /**
@@ -656,6 +577,28 @@ export class FilterMaintenance extends Service {
   }
 }
 Service.FilterMaintenance = FilterMaintenance;
+
+/**
+ * Service "Firmware Update"
+ */
+export class FirmwareUpdate extends Service {
+
+  public static readonly UUID: string = "00000236-0000-1000-8000-0026BB765291";
+
+  constructor(displayName?: string, subtype?: string) {
+    super(displayName, FirmwareUpdate.UUID, subtype);
+
+    // Required Characteristics
+    this.addCharacteristic(Characteristic.FirmwareUpdateReadiness);
+    this.addCharacteristic(Characteristic.FirmwareUpdateStatus);
+
+    // Optional Characteristics
+    this.addOptionalCharacteristic(Characteristic.MatterFirmwareUpdateStatus);
+    this.addOptionalCharacteristic(Characteristic.StagedFirmwareVersion);
+    this.addOptionalCharacteristic(Characteristic.SupportedFirmwareUpdateConfiguration);
+  }
+}
+Service.FirmwareUpdate = FirmwareUpdate;
 
 /**
  * Service "Garage Door Opener"
@@ -1063,6 +1006,10 @@ export class PowerManagement extends Service {
 
     // Required Characteristics
     this.addCharacteristic(Characteristic.WakeConfiguration);
+
+    // Optional Characteristics
+    this.addOptionalCharacteristic(Characteristic.SelectedSleepConfiguration);
+    this.addOptionalCharacteristic(Characteristic.SupportedSleepConfiguration);
   }
 }
 Service.PowerManagement = PowerManagement;
@@ -1188,8 +1135,6 @@ export class Slats extends Service {
     this.addOptionalCharacteristic(Characteristic.TargetTiltAngle);
   }
 }
-// noinspection JSDeprecatedSymbols
-Service.Slat = Slats;
 Service.Slats = Slats;
 
 /**
@@ -1318,6 +1263,25 @@ export class Switch extends Service {
   }
 }
 Service.Switch = Switch;
+
+/**
+ * Service "Tap Management"
+ */
+export class TapManagement extends Service {
+
+  public static readonly UUID: string = "0000022E-0000-1000-8000-0026BB765291";
+
+  constructor(displayName?: string, subtype?: string) {
+    super(displayName, TapManagement.UUID, subtype);
+
+    // Required Characteristics
+    this.addCharacteristic(Characteristic.Active);
+    this.addCharacteristic(Characteristic.CryptoHash);
+    this.addCharacteristic(Characteristic.TapType);
+    this.addCharacteristic(Characteristic.Token);
+  }
+}
+Service.TapManagement = TapManagement;
 
 /**
  * Service "Target Control"
@@ -1493,29 +1457,6 @@ export class ThreadTransport extends Service {
 Service.ThreadTransport = ThreadTransport;
 
 /**
- * Service "Time Information"
- * @deprecated Removed and not used anymore
- */
-export class TimeInformation extends Service {
-
-  public static readonly UUID: string = "00000099-0000-1000-8000-0026BB765291";
-
-  constructor(displayName?: string, subtype?: string) {
-    super(displayName, TimeInformation.UUID, subtype);
-
-    // Required Characteristics
-    this.addCharacteristic(Characteristic.CurrentTime);
-    this.addCharacteristic(Characteristic.DayoftheWeek);
-    this.addCharacteristic(Characteristic.TimeUpdate);
-
-    // Optional Characteristics
-    this.addOptionalCharacteristic(Characteristic.Name);
-  }
-}
-// noinspection JSDeprecatedSymbols
-Service.TimeInformation = TimeInformation;
-
-/**
  * Service "Transfer Transport Management"
  */
 export class TransferTransportManagement extends Service {
@@ -1534,6 +1475,7 @@ Service.TransferTransportManagement = TransferTransportManagement;
 
 /**
  * Service "Tunnel"
+ * @deprecated Removed
  */
 export class Tunnel extends Service {
 
@@ -1551,7 +1493,6 @@ export class Tunnel extends Service {
   }
 }
 // noinspection JSDeprecatedSymbols
-Service.TunneledBTLEAccessoryService = Tunnel;
 Service.Tunnel = Tunnel;
 
 /**

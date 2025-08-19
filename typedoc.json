@@ -1,7 +1,18 @@
 {
   "out": "docs",
-  "includes": "src",
-  "exclude": ["src/**/*.spec.ts"],
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/test-utils/*"
+  ],
+
+  "entryPoints": [
+    "src/index.ts"
+  ],
+
+  "intentionallyNotExported": [
+    "LocalStorage",
+    "MulticastOptions"
+  ],
 
   "excludePrivate": true,
   "excludeProtected": true,
@@ -10,6 +21,7 @@
   "includeVersion": false,
   "validation": {
     "invalidLink": true,
-    "notExported": true
-  }
+    "notExported": false
+  },
+  "blockTags": ["@deprecated", "@example", "@group", "@param", "@returns", "@since"]
 }

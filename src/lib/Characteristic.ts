@@ -1,10 +1,9 @@
 import assert from "assert";
 import createDebug from "debug";
 import { EventEmitter } from "events";
-import { CharacteristicJsonObject } from "../internal-types";
-import { CharacteristicValue, Nullable, VoidCallback } from "../types";
+import { CharacteristicJsonObject, CharacteristicValue, Nullable, PartialAllowingNull, VoidCallback } from "../types";
 import { CharacteristicWarningType } from "./Accessory";
-import {
+import type {
   AccessCodeControlPoint,
   AccessCodeSupportedConfiguration,
   AccessControlLevel,
@@ -31,7 +30,6 @@ import {
   CarbonMonoxideDetected,
   CarbonMonoxideLevel,
   CarbonMonoxidePeakLevel,
-  Category,
   CCAEnergyDetectThreshold,
   CCASignalDetectThreshold,
   CharacteristicValueActiveTransitionCount,
@@ -40,11 +38,10 @@ import {
   ClosedCaptions,
   ColorTemperature,
   ConfigurationState,
-  ConfigureBridgedAccessory,
-  ConfigureBridgedAccessoryStatus,
   ConfiguredName,
   ContactSensorState,
   CoolingThresholdTemperature,
+  CryptoHash,
   CurrentAirPurifierState,
   CurrentAmbientLightLevel,
   CurrentDoorState,
@@ -59,17 +56,13 @@ import {
   CurrentSlatState,
   CurrentTemperature,
   CurrentTiltAngle,
-  CurrentTime,
   CurrentTransport,
   CurrentVerticalTiltAngle,
   CurrentVisibilityState,
   DataStreamHAPTransport,
   DataStreamHAPTransportInterrupt,
-  DayoftheWeek,
   DiagonalFieldOfView,
   DigitalZoom,
-  DiscoverBridgedAccessories,
-  DiscoveredBridgedAccessories,
   DisplayOrder,
   EventRetransmissionMaximum,
   EventSnapshotsActive,
@@ -95,7 +88,6 @@ import {
   InUse,
   IsConfigured,
   LeakDetected,
-  LinkQuality,
   ListPairings,
   LockControlPoint,
   LockCurrentState,
@@ -109,7 +101,10 @@ import {
   ManagedNetworkEnable,
   ManuallyDisabled,
   Manufacturer,
+  MatterFirmwareRevisionNumber,
+  MatterFirmwareUpdateStatus,
   MaximumTransmitPower,
+  MetricsBufferFullState,
   Model,
   MotionDetected,
   MultifunctionButton,
@@ -144,7 +139,6 @@ import {
   ProgrammableSwitchEvent,
   ProgrammableSwitchOutputState,
   ProgramMode,
-  Reachable,
   ReceivedSignalStrengthIndication,
   ReceiverSensitivity,
   RecordingAudioActive,
@@ -167,6 +161,7 @@ import {
   SelectedCameraRecordingConfiguration,
   SelectedDiagnosticsModes,
   SelectedRTPStreamConfiguration,
+  SelectedSleepConfiguration,
   SerialNumber,
   ServiceLabelIndex,
   ServiceLabelNamespace,
@@ -204,14 +199,16 @@ import {
   SupportedDiagnosticsModes,
   SupportedDiagnosticsSnapshot,
   SupportedFirmwareUpdateConfiguration,
+  SupportedMetrics,
   SupportedRouterConfiguration,
   SupportedRTPConfiguration,
+  SupportedSleepConfiguration,
   SupportedTransferTransportConfiguration,
   SupportedVideoRecordingConfiguration,
   SupportedVideoStreamConfiguration,
   SwingMode,
+  TapType,
   TargetAirPurifierState,
-  TargetAirQuality,
   TargetControlList,
   TargetControlSupportedConfiguration,
   TargetDoorState,
@@ -223,7 +220,6 @@ import {
   TargetMediaState,
   TargetPosition,
   TargetRelativeHumidity,
-  TargetSlatState,
   TargetTemperature,
   TargetTiltAngle,
   TargetVerticalTiltAngle,
@@ -234,7 +230,7 @@ import {
   ThreadNodeCapabilities,
   ThreadOpenThreadVersion,
   ThreadStatus,
-  TimeUpdate,
+  Token,
   TransmitPower,
   TunnelConnectionTimeout,
   TunneledAccessoryAdvertising,
@@ -270,9 +266,13 @@ import {
   numericUpperBound,
 } from "./util/request-util";
 import { BASE_UUID, toShortForm } from "./util/uuid";
+import { checkName } from "./util/checkName";
 
 const debug = createDebug("HAP-NodeJS:Characteristic");
 
+/**
+ * @group Characteristic
+ */
 export const enum Formats {
   BOOL = "bool",
   /**
@@ -310,17 +310,12 @@ export const enum Formats {
   /**
    * Base64 encoded tlv8 string.
    */
-  TLV8 = "tlv8",
-  /**
-   * @deprecated Not contained in the HAP spec
-   */
-  ARRAY = "array",
-  /**
-   * @deprecated Not contained in the HAP spec
-   */
-  DICTIONARY = "dict",
+  TLV8 = "tlv8"
 }
 
+/**
+ * @group Characteristic
+ */
 export const enum Units {
   /**
    * Celsius is the only temperature unit in the HomeKit Accessory Protocol.
@@ -334,19 +329,16 @@ export const enum Units {
   SECONDS = "seconds",
 }
 
+/**
+ * @group Characteristic
+ */
 export const enum Perms {
-  // noinspection JSUnusedGlobalSymbols
-  /**
-   * @deprecated replaced by {@link PAIRED_READ}. Kept for backwards compatibility.
-   */
-  READ = "pr",
-  /**
-   * @deprecated replaced by {@link PAIRED_WRITE}. Kept for backwards compatibility.
-   */
-  WRITE = "pw",
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   PAIRED_READ = "pr",
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   PAIRED_WRITE = "pw",
   NOTIFY = "ev",
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   EVENTS = "ev",
   ADDITIONAL_AUTHORIZATION = "aa",
   TIMED_WRITE = "tw",
@@ -354,6 +346,9 @@ export const enum Perms {
   WRITE_RESPONSE = "wr",
 }
 
+/**
+ * @group Characteristic
+ */
 export interface CharacteristicProps {
   format: Formats | string;
   perms: Perms[];
@@ -379,7 +374,7 @@ export interface CharacteristicProps {
    */
   maxDataLen?: number;
   /**
-   * Defines a array of valid values to be used for the characteristic.
+   * Defines an array of valid values to be used for the characteristic.
    */
   validValues?: number[];
   /**
@@ -390,12 +385,23 @@ export interface CharacteristicProps {
   adminOnlyAccess?: Access[];
 }
 
+/**
+ * Describes the abstract access to a {@link Characteristic}.
+ * It abstracts the more granular access described by {@link Perms}.
+ *
+ * It is used in {@link CharacteristicProps.adminOnlyAccess}.
+ *
+ * @group Characteristic
+ */
 export const enum Access {
   READ = 0x00,
   WRITE = 0x01,
   NOTIFY = 0x02
 }
 
+/**
+ * @group Characteristic
+ */
 export type CharacteristicChange = {
   originator?: HAPConnection,
   newValue: Nullable<CharacteristicValue>;
@@ -404,6 +410,9 @@ export type CharacteristicChange = {
   context?: CharacteristicContext;
 };
 
+/**
+ * @group Characteristic
+ */
 export const enum ChangeReason {
   /**
    * Reason used when HomeKit writes a value or the API user calls {@link Characteristic.setValue}.
@@ -414,7 +423,7 @@ export const enum ChangeReason {
    */
   UPDATE = "update",
   /**
-   * Used when when HomeKit reads a value or the API user calls the deprecated method {@link Characteristic.getValue}.
+   * Used when HomeKit reads a value or the API user calls the deprecated method `Characteristic.getValue`.
    */
   READ = "read",
   /**
@@ -427,6 +436,8 @@ export const enum ChangeReason {
  * This format for a context object can be used to pass to any characteristic write operation.
  * It can contain additional information used by the internal event handlers of hap-nodejs.
  * The context object can be combined with any custom data for own use.
+ *
+ * @group Characteristic
  */
 export interface CharacteristicOperationContext {
   /**
@@ -438,7 +449,7 @@ export interface CharacteristicOperationContext {
 }
 
 /**
- * @private
+ * @group Characteristic
  */
 export interface SerializedCharacteristic {
   displayName: string,
@@ -450,6 +461,9 @@ export interface SerializedCharacteristic {
   props: CharacteristicProps,
 }
 
+/**
+ * @group Characteristic
+ */
 export const enum CharacteristicEventTypes {
   /**
    * This event is thrown when a HomeKit controller wants to read the current value of the characteristic.
@@ -484,18 +498,39 @@ export const enum CharacteristicEventTypes {
   CHARACTERISTIC_WARNING = "characteristic-warning",
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CharacteristicContext = any
+/**
+ * @group Characteristic
+ */
+export type CharacteristicContext = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
+/**
+ * @group Characteristic
+ */
 export type CharacteristicGetCallback = (status?: HAPStatus | null | Error, value?: Nullable<CharacteristicValue>) => void;
+/**
+ * @group Characteristic
+ */
 export type CharacteristicSetCallback = (error?: HAPStatus | null | Error, writeResponse?: Nullable<CharacteristicValue>) => void;
+/**
+ * @group Characteristic
+ */
 export type CharacteristicGetHandler = (context: CharacteristicContext, connection?: HAPConnection)
   => Promise<Nullable<CharacteristicValue>> | Nullable<CharacteristicValue>;
+/**
+ * @group Characteristic
+ */
 export type CharacteristicSetHandler = (value: CharacteristicValue, context: CharacteristicContext, connection?: HAPConnection)
   => Promise<Nullable<CharacteristicValue> | void> | Nullable<CharacteristicValue> | void;
 
+/**
+ * @group Characteristic
+ */
 export type AdditionalAuthorizationHandler = (additionalAuthorizationData: string | undefined) => boolean;
 
+/**
+ * @group Characteristic
+ */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface Characteristic {
 
   on(event: "get", listener: (callback: CharacteristicGetCallback, context: CharacteristicContext, connection?: HAPConnection) => void): this;
@@ -544,6 +579,9 @@ export declare interface Characteristic {
 
 }
 
+/**
+ * @group Characteristic
+ */
 class ValidValuesIterable implements Iterable<number> {
 
   private readonly props: CharacteristicProps;
@@ -630,311 +668,1004 @@ function minWithUndefined(a?: number, b?: number): number | undefined {
  *
  * You can also define custom Characteristics by providing your own UUID. Custom Characteristics can be added
  * to any native or custom Services, but Siri will likely not be able to work with these.
+ *
+ * @group Characteristic
  */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class Characteristic extends EventEmitter {
-
-  /**
-   * @deprecated Please use the Formats const enum above.
-   */
-  // @ts-expect-error: forceConsistentCasingInFileNames compiler option
-  static Formats = Formats;
-  /**
-   * @deprecated Please use the Units const enum above.
-   */
-  // @ts-expect-error: forceConsistentCasingInFileNames compiler option
-  static Units = Units;
-  /**
-   * @deprecated Please use the Perms const enum above.
-   */
-  // @ts-expect-error: forceConsistentCasingInFileNames compiler option
-  static Perms = Perms;
 
   // Pattern below is for automatic detection of the section of defined characteristics. Used by the generator
   // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+  /**
+   * @group Characteristic Definitions
+   */
   public static AccessCodeControlPoint: typeof AccessCodeControlPoint;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AccessCodeSupportedConfiguration: typeof AccessCodeSupportedConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AccessControlLevel: typeof AccessControlLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AccessoryFlags: typeof AccessoryFlags;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AccessoryIdentifier: typeof AccessoryIdentifier;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Active: typeof Active;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ActiveIdentifier: typeof ActiveIdentifier;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ActivityInterval: typeof ActivityInterval;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AdministratorOnlyAccess: typeof AdministratorOnlyAccess;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AirParticulateDensity: typeof AirParticulateDensity;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AirParticulateSize: typeof AirParticulateSize;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AirPlayEnable: typeof AirPlayEnable;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AirQuality: typeof AirQuality;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AppMatchingIdentifier: typeof AppMatchingIdentifier;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AssetUpdateReadiness: typeof AssetUpdateReadiness;
+  /**
+   * @group Characteristic Definitions
+   */
   public static AudioFeedback: typeof AudioFeedback;
+  /**
+   * @group Characteristic Definitions
+   */
   public static BatteryLevel: typeof BatteryLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Brightness: typeof Brightness;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ButtonEvent: typeof ButtonEvent;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CameraOperatingModeIndicator: typeof CameraOperatingModeIndicator;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CarbonDioxideDetected: typeof CarbonDioxideDetected;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CarbonDioxideLevel: typeof CarbonDioxideLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CarbonDioxidePeakLevel: typeof CarbonDioxidePeakLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CarbonMonoxideDetected: typeof CarbonMonoxideDetected;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CarbonMonoxideLevel: typeof CarbonMonoxideLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CarbonMonoxidePeakLevel: typeof CarbonMonoxidePeakLevel;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static Category: typeof Category;
   public static CCAEnergyDetectThreshold: typeof CCAEnergyDetectThreshold;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CCASignalDetectThreshold: typeof CCASignalDetectThreshold;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CharacteristicValueActiveTransitionCount: typeof CharacteristicValueActiveTransitionCount;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CharacteristicValueTransitionControl: typeof CharacteristicValueTransitionControl;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ChargingState: typeof ChargingState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ClosedCaptions: typeof ClosedCaptions;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ColorTemperature: typeof ColorTemperature;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ConfigurationState: typeof ConfigurationState;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static ConfigureBridgedAccessory: typeof ConfigureBridgedAccessory;
-  /**
-   * @deprecated Removed and not used anymore
-   */
-  public static ConfigureBridgedAccessoryStatus: typeof ConfigureBridgedAccessoryStatus;
   public static ConfiguredName: typeof ConfiguredName;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ContactSensorState: typeof ContactSensorState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CoolingThresholdTemperature: typeof CoolingThresholdTemperature;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static CryptoHash: typeof CryptoHash;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentAirPurifierState: typeof CurrentAirPurifierState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentAmbientLightLevel: typeof CurrentAmbientLightLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentDoorState: typeof CurrentDoorState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentFanState: typeof CurrentFanState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentHeaterCoolerState: typeof CurrentHeaterCoolerState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentHeatingCoolingState: typeof CurrentHeatingCoolingState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentHorizontalTiltAngle: typeof CurrentHorizontalTiltAngle;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentHumidifierDehumidifierState: typeof CurrentHumidifierDehumidifierState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentMediaState: typeof CurrentMediaState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentPosition: typeof CurrentPosition;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentRelativeHumidity: typeof CurrentRelativeHumidity;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentSlatState: typeof CurrentSlatState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentTemperature: typeof CurrentTemperature;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentTiltAngle: typeof CurrentTiltAngle;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static CurrentTime: typeof CurrentTime;
   public static CurrentTransport: typeof CurrentTransport;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentVerticalTiltAngle: typeof CurrentVerticalTiltAngle;
+  /**
+   * @group Characteristic Definitions
+   */
   public static CurrentVisibilityState: typeof CurrentVisibilityState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static DataStreamHAPTransport: typeof DataStreamHAPTransport;
+  /**
+   * @group Characteristic Definitions
+   */
   public static DataStreamHAPTransportInterrupt: typeof DataStreamHAPTransportInterrupt;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static DayoftheWeek: typeof DayoftheWeek;
   public static DiagonalFieldOfView: typeof DiagonalFieldOfView;
+  /**
+   * @group Characteristic Definitions
+   */
   public static DigitalZoom: typeof DigitalZoom;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static DiscoverBridgedAccessories: typeof DiscoverBridgedAccessories;
-  /**
-   * @deprecated Removed and not used anymore
-   */
-  public static DiscoveredBridgedAccessories: typeof DiscoveredBridgedAccessories;
   public static DisplayOrder: typeof DisplayOrder;
+  /**
+   * @group Characteristic Definitions
+   */
   public static EventRetransmissionMaximum: typeof EventRetransmissionMaximum;
+  /**
+   * @group Characteristic Definitions
+   */
   public static EventSnapshotsActive: typeof EventSnapshotsActive;
+  /**
+   * @group Characteristic Definitions
+   */
   public static EventTransmissionCounters: typeof EventTransmissionCounters;
+  /**
+   * @group Characteristic Definitions
+   */
   public static FilterChangeIndication: typeof FilterChangeIndication;
+  /**
+   * @group Characteristic Definitions
+   */
   public static FilterLifeLevel: typeof FilterLifeLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static FirmwareRevision: typeof FirmwareRevision;
+  /**
+   * @group Characteristic Definitions
+   */
   public static FirmwareUpdateReadiness: typeof FirmwareUpdateReadiness;
+  /**
+   * @group Characteristic Definitions
+   */
   public static FirmwareUpdateStatus: typeof FirmwareUpdateStatus;
+  /**
+   * @group Characteristic Definitions
+   */
   public static HardwareFinish: typeof HardwareFinish;
+  /**
+   * @group Characteristic Definitions
+   */
   public static HardwareRevision: typeof HardwareRevision;
+  /**
+   * @group Characteristic Definitions
+   */
   public static HeartBeat: typeof HeartBeat;
+  /**
+   * @group Characteristic Definitions
+   */
   public static HeatingThresholdTemperature: typeof HeatingThresholdTemperature;
+  /**
+   * @group Characteristic Definitions
+   */
   public static HoldPosition: typeof HoldPosition;
+  /**
+   * @group Characteristic Definitions
+   */
   public static HomeKitCameraActive: typeof HomeKitCameraActive;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Hue: typeof Hue;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Identifier: typeof Identifier;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Identify: typeof Identify;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ImageMirroring: typeof ImageMirroring;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ImageRotation: typeof ImageRotation;
+  /**
+   * @group Characteristic Definitions
+   */
   public static InputDeviceType: typeof InputDeviceType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static InputSourceType: typeof InputSourceType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static InUse: typeof InUse;
+  /**
+   * @group Characteristic Definitions
+   */
   public static IsConfigured: typeof IsConfigured;
+  /**
+   * @group Characteristic Definitions
+   */
   public static LeakDetected: typeof LeakDetected;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static LinkQuality: typeof LinkQuality;
   public static ListPairings: typeof ListPairings;
+  /**
+   * @group Characteristic Definitions
+   */
   public static LockControlPoint: typeof LockControlPoint;
+  /**
+   * @group Characteristic Definitions
+   */
   public static LockCurrentState: typeof LockCurrentState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static LockLastKnownAction: typeof LockLastKnownAction;
+  /**
+   * @group Characteristic Definitions
+   */
   public static LockManagementAutoSecurityTimeout: typeof LockManagementAutoSecurityTimeout;
+  /**
+   * @group Characteristic Definitions
+   */
   public static LockPhysicalControls: typeof LockPhysicalControls;
+  /**
+   * @group Characteristic Definitions
+   */
   public static LockTargetState: typeof LockTargetState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Logs: typeof Logs;
+  /**
+   * @group Characteristic Definitions
+   */
   public static MACRetransmissionMaximum: typeof MACRetransmissionMaximum;
+  /**
+   * @group Characteristic Definitions
+   */
   public static MACTransmissionCounters: typeof MACTransmissionCounters;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ManagedNetworkEnable: typeof ManagedNetworkEnable;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ManuallyDisabled: typeof ManuallyDisabled;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Manufacturer: typeof Manufacturer;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static MatterFirmwareRevisionNumber: typeof MatterFirmwareRevisionNumber;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static MatterFirmwareUpdateStatus: typeof MatterFirmwareUpdateStatus;
+  /**
+   * @group Characteristic Definitions
+   */
   public static MaximumTransmitPower: typeof MaximumTransmitPower;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static MetricsBufferFullState: typeof MetricsBufferFullState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Model: typeof Model;
+  /**
+   * @group Characteristic Definitions
+   */
   public static MotionDetected: typeof MotionDetected;
+  /**
+   * @group Characteristic Definitions
+   */
   public static MultifunctionButton: typeof MultifunctionButton;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Mute: typeof Mute;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Name: typeof Name;
+  /**
+   * @group Characteristic Definitions
+   */
   public static NetworkAccessViolationControl: typeof NetworkAccessViolationControl;
+  /**
+   * @group Characteristic Definitions
+   */
   public static NetworkClientProfileControl: typeof NetworkClientProfileControl;
+  /**
+   * @group Characteristic Definitions
+   */
   public static NetworkClientStatusControl: typeof NetworkClientStatusControl;
+  /**
+   * @group Characteristic Definitions
+   */
   public static NFCAccessControlPoint: typeof NFCAccessControlPoint;
+  /**
+   * @group Characteristic Definitions
+   */
   public static NFCAccessSupportedConfiguration: typeof NFCAccessSupportedConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static NightVision: typeof NightVision;
+  /**
+   * @group Characteristic Definitions
+   */
   public static NitrogenDioxideDensity: typeof NitrogenDioxideDensity;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ObstructionDetected: typeof ObstructionDetected;
+  /**
+   * @group Characteristic Definitions
+   */
   public static OccupancyDetected: typeof OccupancyDetected;
+  /**
+   * @group Characteristic Definitions
+   */
   public static On: typeof On;
+  /**
+   * @group Characteristic Definitions
+   */
   public static OperatingStateResponse: typeof OperatingStateResponse;
+  /**
+   * @group Characteristic Definitions
+   */
   public static OpticalZoom: typeof OpticalZoom;
+  /**
+   * @group Characteristic Definitions
+   */
   public static OutletInUse: typeof OutletInUse;
+  /**
+   * @group Characteristic Definitions
+   */
   public static OzoneDensity: typeof OzoneDensity;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PairingFeatures: typeof PairingFeatures;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PairSetup: typeof PairSetup;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PairVerify: typeof PairVerify;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PasswordSetting: typeof PasswordSetting;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PeriodicSnapshotsActive: typeof PeriodicSnapshotsActive;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PictureMode: typeof PictureMode;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Ping: typeof Ping;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PM10Density: typeof PM10Density;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PM2_5Density: typeof PM2_5Density;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PositionState: typeof PositionState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static PowerModeSelection: typeof PowerModeSelection;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ProductData: typeof ProductData;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ProgrammableSwitchEvent: typeof ProgrammableSwitchEvent;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ProgrammableSwitchOutputState: typeof ProgrammableSwitchOutputState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ProgramMode: typeof ProgramMode;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static Reachable: typeof Reachable;
   public static ReceivedSignalStrengthIndication: typeof ReceivedSignalStrengthIndication;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ReceiverSensitivity: typeof ReceiverSensitivity;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RecordingAudioActive: typeof RecordingAudioActive;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RelativeHumidityDehumidifierThreshold: typeof RelativeHumidityDehumidifierThreshold;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RelativeHumidityHumidifierThreshold: typeof RelativeHumidityHumidifierThreshold;
+  /**
+   * @group Characteristic Definitions
+   * @deprecated Removed
+   */
   public static RelayControlPoint: typeof RelayControlPoint;
+  /**
+   * @group Characteristic Definitions
+   * @deprecated Removed
+   */
   public static RelayEnabled: typeof RelayEnabled;
+  /**
+   * @group Characteristic Definitions
+   * @deprecated Removed
+   */
   public static RelayState: typeof RelayState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RemainingDuration: typeof RemainingDuration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RemoteKey: typeof RemoteKey;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ResetFilterIndication: typeof ResetFilterIndication;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RotationDirection: typeof RotationDirection;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RotationSpeed: typeof RotationSpeed;
+  /**
+   * @group Characteristic Definitions
+   */
   public static RouterStatus: typeof RouterStatus;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Saturation: typeof Saturation;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SecuritySystemAlarmType: typeof SecuritySystemAlarmType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SecuritySystemCurrentState: typeof SecuritySystemCurrentState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SecuritySystemTargetState: typeof SecuritySystemTargetState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SelectedAudioStreamConfiguration: typeof SelectedAudioStreamConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SelectedCameraRecordingConfiguration: typeof SelectedCameraRecordingConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SelectedDiagnosticsModes: typeof SelectedDiagnosticsModes;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SelectedRTPStreamConfiguration: typeof SelectedRTPStreamConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static SelectedSleepConfiguration: typeof SelectedSleepConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SerialNumber: typeof SerialNumber;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ServiceLabelIndex: typeof ServiceLabelIndex;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ServiceLabelNamespace: typeof ServiceLabelNamespace;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SetDuration: typeof SetDuration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SetupDataStreamTransport: typeof SetupDataStreamTransport;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SetupEndpoints: typeof SetupEndpoints;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SetupTransferTransport: typeof SetupTransferTransport;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SignalToNoiseRatio: typeof SignalToNoiseRatio;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SiriEnable: typeof SiriEnable;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SiriEndpointSessionStatus: typeof SiriEndpointSessionStatus;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SiriEngineVersion: typeof SiriEngineVersion;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SiriInputType: typeof SiriInputType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SiriLightOnUse: typeof SiriLightOnUse;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SiriListening: typeof SiriListening;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SiriTouchToUse: typeof SiriTouchToUse;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SlatType: typeof SlatType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SleepDiscoveryMode: typeof SleepDiscoveryMode;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SleepInterval: typeof SleepInterval;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SmokeDetected: typeof SmokeDetected;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SoftwareRevision: typeof SoftwareRevision;
+  /**
+   * @group Characteristic Definitions
+   */
   public static StagedFirmwareVersion: typeof StagedFirmwareVersion;
+  /**
+   * @group Characteristic Definitions
+   */
   public static StatusActive: typeof StatusActive;
+  /**
+   * @group Characteristic Definitions
+   */
   public static StatusFault: typeof StatusFault;
+  /**
+   * @group Characteristic Definitions
+   */
   public static StatusJammed: typeof StatusJammed;
+  /**
+   * @group Characteristic Definitions
+   */
   public static StatusLowBattery: typeof StatusLowBattery;
+  /**
+   * @group Characteristic Definitions
+   */
   public static StatusTampered: typeof StatusTampered;
+  /**
+   * @group Characteristic Definitions
+   */
   public static StreamingStatus: typeof StreamingStatus;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SulphurDioxideDensity: typeof SulphurDioxideDensity;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedAssetTypes: typeof SupportedAssetTypes;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedAudioRecordingConfiguration: typeof SupportedAudioRecordingConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedAudioStreamConfiguration: typeof SupportedAudioStreamConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedCameraRecordingConfiguration: typeof SupportedCameraRecordingConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedCharacteristicValueTransitionConfiguration: typeof SupportedCharacteristicValueTransitionConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedDataStreamTransportConfiguration: typeof SupportedDataStreamTransportConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedDiagnosticsModes: typeof SupportedDiagnosticsModes;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedDiagnosticsSnapshot: typeof SupportedDiagnosticsSnapshot;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedFirmwareUpdateConfiguration: typeof SupportedFirmwareUpdateConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static SupportedMetrics: typeof SupportedMetrics;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedRouterConfiguration: typeof SupportedRouterConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedRTPConfiguration: typeof SupportedRTPConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static SupportedSleepConfiguration: typeof SupportedSleepConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedTransferTransportConfiguration: typeof SupportedTransferTransportConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedVideoRecordingConfiguration: typeof SupportedVideoRecordingConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SupportedVideoStreamConfiguration: typeof SupportedVideoStreamConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static SwingMode: typeof SwingMode;
+  /**
+   * @group Characteristic Definitions
+   */
+  public static TapType: typeof TapType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetAirPurifierState: typeof TargetAirPurifierState;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static TargetAirQuality: typeof TargetAirQuality;
   public static TargetControlList: typeof TargetControlList;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetControlSupportedConfiguration: typeof TargetControlSupportedConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetDoorState: typeof TargetDoorState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetFanState: typeof TargetFanState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetHeaterCoolerState: typeof TargetHeaterCoolerState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetHeatingCoolingState: typeof TargetHeatingCoolingState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetHorizontalTiltAngle: typeof TargetHorizontalTiltAngle;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetHumidifierDehumidifierState: typeof TargetHumidifierDehumidifierState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetMediaState: typeof TargetMediaState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetPosition: typeof TargetPosition;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetRelativeHumidity: typeof TargetRelativeHumidity;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static TargetSlatState: typeof TargetSlatState;
   public static TargetTemperature: typeof TargetTemperature;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetTiltAngle: typeof TargetTiltAngle;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetVerticalTiltAngle: typeof TargetVerticalTiltAngle;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TargetVisibilityState: typeof TargetVisibilityState;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TemperatureDisplayUnits: typeof TemperatureDisplayUnits;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ThirdPartyCameraActive: typeof ThirdPartyCameraActive;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ThreadControlPoint: typeof ThreadControlPoint;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ThreadNodeCapabilities: typeof ThreadNodeCapabilities;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ThreadOpenThreadVersion: typeof ThreadOpenThreadVersion;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ThreadStatus: typeof ThreadStatus;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Characteristic Definitions
    */
-  public static TimeUpdate: typeof TimeUpdate;
+  public static Token: typeof Token;
+  /**
+   * @group Characteristic Definitions
+   */
   public static TransmitPower: typeof TransmitPower;
+  /**
+   * @group Characteristic Definitions
+   * @deprecated Removed
+   */
   public static TunnelConnectionTimeout: typeof TunnelConnectionTimeout;
+  /**
+   * @group Characteristic Definitions
+   * @deprecated Removed
+   */
   public static TunneledAccessoryAdvertising: typeof TunneledAccessoryAdvertising;
+  /**
+   * @group Characteristic Definitions
+   * @deprecated Removed
+   */
   public static TunneledAccessoryConnected: typeof TunneledAccessoryConnected;
+  /**
+   * @group Characteristic Definitions
+   * @deprecated Removed
+   */
   public static TunneledAccessoryStateNumber: typeof TunneledAccessoryStateNumber;
+  /**
+   * @group Characteristic Definitions
+   */
   public static ValveType: typeof ValveType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Version: typeof Version;
+  /**
+   * @group Characteristic Definitions
+   */
   public static VideoAnalysisActive: typeof VideoAnalysisActive;
+  /**
+   * @group Characteristic Definitions
+   */
   public static VOCDensity: typeof VOCDensity;
+  /**
+   * @group Characteristic Definitions
+   */
   public static Volume: typeof Volume;
+  /**
+   * @group Characteristic Definitions
+   */
   public static VolumeControlType: typeof VolumeControlType;
+  /**
+   * @group Characteristic Definitions
+   */
   public static VolumeSelector: typeof VolumeSelector;
+  /**
+   * @group Characteristic Definitions
+   */
   public static WakeConfiguration: typeof WakeConfiguration;
+  /**
+   * @group Characteristic Definitions
+   */
   public static WANConfigurationList: typeof WANConfigurationList;
+  /**
+   * @group Characteristic Definitions
+   */
   public static WANStatusList: typeof WANStatusList;
+  /**
+   * @group Characteristic Definitions
+   */
   public static WaterLevel: typeof WaterLevel;
+  /**
+   * @group Characteristic Definitions
+   */
   public static WiFiCapabilities: typeof WiFiCapabilities;
+  /**
+   * @group Characteristic Definitions
+   */
   public static WiFiConfigurationControl: typeof WiFiConfigurationControl;
+  /**
+   * @group Characteristic Definitions
+   */
   public static WiFiSatelliteStatus: typeof WiFiSatelliteStatus;
   // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
@@ -944,23 +1675,18 @@ export class Characteristic extends EventEmitter {
   iid: Nullable<number> = null;
   value: Nullable<CharacteristicValue> = null;
   /**
-   * @deprecated replaced by {@link statusCode}
-   * @private
-   */
-  status: Nullable<Error> = null;
-  /**
    * @private
    */
   statusCode: HAPStatus = HAPStatus.SUCCESS;
   props: CharacteristicProps;
 
   /**
-   * The {@link onGet} handler
+   * The {@link Characteristic.onGet} handler
    */
   private getHandler?: CharacteristicGetHandler;
 
   /**
-   * The {@link onSet} handler
+   * The {@link Characteristic.onSet} handler
    */
   private setHandler?: CharacteristicSetHandler;
 
@@ -1014,7 +1740,7 @@ export class Characteristic extends EventEmitter {
 
   /**
    * Accepts a function that will be called when setting the value of a Characteristic.
-   * If the characteristic supports {@link Perms.WRITE_RESPONSE} and the request requests a write response value,
+   * If the characteristic supports {@link Perms.WRITE_RESPONSE} and the request requests a write-response value,
    * the returned value will be used.
    * May optionally return a promise.
    *
@@ -1050,12 +1776,15 @@ export class Characteristic extends EventEmitter {
    *
    * @param props - Partial properties object with the desired updates.
    */
-  public setProps(props: Partial<CharacteristicProps>): Characteristic {
+  public setProps(props: PartialAllowingNull<CharacteristicProps>): Characteristic {
     assert(props, "props cannot be undefined when setting props");
     // TODO calling setProps after publish doesn't lead to a increment in the current configuration number
 
+    let formatDidChange = false;
+
     // for every value "null" can be used to reset props, except for required props
     if (props.format) {
+      formatDidChange = this.props.format !== props.format;
       this.props.format = props.format;
     }
     if (props.perms) {
@@ -1222,11 +1951,32 @@ export class Characteristic extends EventEmitter {
       }
     }
 
+    if ((isNumericFormat(this.props.format) || this.props.format === Formats.STRING)
+      && this.value != null
+      && !formatDidChange
+      && this.statusCode === HAPStatus.SUCCESS
+      && this.UUID !== Characteristic.ProgrammableSwitchEvent.UUID) {
+      // explaining the if statement above:
+      // - We only do a check for numeric and string formats as they are the only ones affected by characteristic property restrictions.
+      // - There must be a value to begin with. Otherwise, it should just stay not having a value at all (anything else is guess work).
+      // - If the format is changed through `setProps` we rely on the user to supply a valid value after the `setProps` call!
+      // - If the characteristic is marked as erroneous the value is not considered valid anyway, and we must not remove the `statusCode`.
+      // - Special case for `ProgrammableSwitchEvent` where every change in value is considered an event which would result in ghost button presses
+
+      // validateUserInput when called from setProps is intended to clamp value withing allowed range. It is why warnings should not be displayed.
+      const correctedValue = this.validateUserInput(this.value, CharacteristicWarningType.DEBUG_MESSAGE);
+
+      if (correctedValue !== this.value) {
+        // we don't want to emit a CHANGE event if the value didn't change at all!
+        this.updateValue(correctedValue);
+      }
+    }
+
     return this;
   }
 
   /**
-   * This method can be used to gain a Iterator to loop over all valid values defined for this characteristic.
+   * This method can be used to gain an Iterator to loop over all valid values defined for this characteristic.
    *
    * The range of valid values can be defined using three different ways via the {@link CharacteristicProps} object
    * (set via the {@link setProps} method):
@@ -1259,10 +2009,10 @@ export class Characteristic extends EventEmitter {
 
   // noinspection JSUnusedGlobalSymbols
   /**
-   * This method can be used to setup additional authorization for a characteristic.
-   * For one it adds the {@link Perms.ADDITIONAL_AUTHORIZATION} permission to the characteristic
+   * This method can be used to set up additional authorization for a characteristic.
+   * For one, it adds the {@link Perms.ADDITIONAL_AUTHORIZATION} permission to the characteristic
    * (if it wasn't already) to signal support for additional authorization to HomeKit.
-   * Additionally an {@link AdditionalAuthorizationHandler} is setup up which is called
+   * Additionally, an {@link AdditionalAuthorizationHandler} is set up which is called
    * before a write request is performed.
    *
    * Additional Authorization Data can be added to SET request via a custom iOS App.
@@ -1282,70 +2032,46 @@ export class Characteristic extends EventEmitter {
   }
 
   /**
-   * Updates the current value of the characteristic.
-   *
-   * @param callback
-   * @param context
-   * @private use to return the current value on HAP requests
-   *
-   * @deprecated
-   */
-  getValue(callback?: CharacteristicGetCallback, context?: CharacteristicContext): void {
-    this.handleGetRequest(undefined, context).then(value => {
-      if (callback) {
-        callback(null, value);
-      }
-    }, reason => {
-      if (callback) {
-        callback(reason);
-      }
-    });
-  }
-
-  /**
    * This updates the value by calling the {@link CharacteristicEventTypes.SET} event handler associated with the characteristic.
-   * This acts the same way as when a HomeKit controller sends a /characteristics request to update the characteristic.
-   * A event notification will be sent to all connected HomeKit controllers which are registered
+   * This acts the same way as when a HomeKit controller sends a `/characteristics` request to update the characteristic.
+   * An event notification will be sent to all connected HomeKit controllers which are registered
    * to receive event notifications for this characteristic.
    *
    * This method behaves like a {@link updateValue} call with the addition that the own {@link CharacteristicEventTypes.SET}
    * event handler is called.
    *
    * @param value - The new value.
+   *
+   * Note: If you don't want the {@link CharacteristicEventTypes.SET} to be called, refer to {@link updateValue}.
    */
   setValue(value: CharacteristicValue): Characteristic
   /**
    * Sets the state of the characteristic to an errored state.
-   * If a onGet or GET handler is set up, the errored state will be ignored and the characteristic
-   * will always query the latest state by calling the provided handler.
+   *
+   * If a {@link onGet} or {@link CharacteristicEventTypes.GET} handler is set up,
+   * the errored state will be ignored and the characteristic will always query the latest state by calling the provided handler.
    *
    * If a generic error object is supplied, the characteristic tries to extract a {@link HAPStatus} code
    * from the error message string. If not possible a generic {@link HAPStatus.SERVICE_COMMUNICATION_FAILURE} will be used.
    * If the supplied error object is an instance of {@link HapStatusError} the corresponding status will be used.
    *
+   * This doesn't call any registered {@link onSet} or {@link CharacteristicEventTypes.SET} handlers.
+   *
+   * Have a look at the
+   * {@link https://github.com/homebridge/HAP-NodeJS/wiki/Presenting-Erroneous-Accessory-State-to-the-User Presenting Erroneous Accessory State to the User}
+   * guide for more information on how to present erroneous state to the user.
+   *
    * @param error - The error object
+   *
+   * Note: Erroneous state is never **pushed** to the client side. Only, if the HomeKit client requests the current
+   *  state of the Characteristic, the corresponding {@link HapStatusError} is returned. As described above,
+   *  any {@link onGet} or {@link CharacteristicEventTypes.GET} handlers have precedence.
    */
   setValue(error: HapStatusError | Error): Characteristic;
   /**
    * This updates the value by calling the {@link CharacteristicEventTypes.SET} event handler associated with the characteristic.
-   * This acts the same way as when a HomeKit controller sends a /characteristics request to update the characteristic.
-   * A event notification will be sent to all connected HomeKit controllers which are registered
-   * to receive event notifications for this characteristic.
-   *
-   * This method behaves like a {@link updateValue} call with the addition that the own {@link CharacteristicEventTypes.SET}
-   * event handler is called.
-   *
-   * @param value - The new value.
-   * @param callback - Deprecated parameter there to provide backwards compatibility. Called once the
-   *   {@link CharacteristicEventTypes.SET} event handler returns.
-   * @param context - Passed to the {@link CharacteristicEventTypes.SET} and {@link CharacteristicEventTypes.CHANGE} event handler.
-   * @deprecated Parameter callback is deprecated.
-   */
-  setValue(value: CharacteristicValue, callback?: CharacteristicSetCallback, context?: CharacteristicContext): Characteristic
-  /**
-   * This updates the value by calling the {@link CharacteristicEventTypes.SET} event handler associated with the characteristic.
-   * This acts the same way as when a HomeKit controller sends a /characteristics request to update the characteristic.
-   * A event notification will be sent to all connected HomeKit controllers which are registered
+   * This acts the same way as when a HomeKit controller sends a `/characteristics` request to update the characteristic.
+   * An event notification will be sent to all connected HomeKit controllers which are registered
    * to receive event notifications for this characteristic.
    *
    * This method behaves like a {@link updateValue} call with the addition that the own {@link CharacteristicEventTypes.SET}
@@ -1353,13 +2079,13 @@ export class Characteristic extends EventEmitter {
    *
    * @param value - The new value.
    * @param context - Passed to the {@link CharacteristicEventTypes.SET} and {@link CharacteristicEventTypes.CHANGE} event handler.
+   *
+   * Note: If you don't want the {@link CharacteristicEventTypes.SET} to be called, refer to {@link updateValue}.
    */
   setValue(value: CharacteristicValue, context?: CharacteristicContext): Characteristic;
   setValue(value: CharacteristicValue | Error, callback?: CharacteristicSetCallback, context?: CharacteristicContext): Characteristic {
     if (value instanceof Error) {
       this.statusCode = value instanceof HapStatusError? value.hapStatus: extractHAPStatusFromError(value);
-      // noinspection JSDeprecatedSymbols
-      this.status = value;
 
       if (callback) {
         callback();
@@ -1400,36 +2126,43 @@ export class Characteristic extends EventEmitter {
   }
 
   /**
-   * This updates the value of the characteristic. If the value changed, a event notification will be sent to all connected
+   * This updates the value of the characteristic. If the value changed, an event notification will be sent to all connected
    * HomeKit controllers which are registered to receive event notifications for this characteristic.
    *
    * @param value - The new value or a `Error` or {@link HapStatusError}.
+   *
+   * Note: Refer to the respective overloads for {@link CharacteristicValue} or {@link HapStatusError} for respective documentation.
    */
   updateValue(value: Nullable<CharacteristicValue> | Error | HapStatusError): Characteristic;
   /**
+   * This updates the value of the characteristic. If the value changed, an event notification will be sent to all connected
+   * HomeKit controllers which are registered to receive event notifications for this characteristic.
+   *
+   * @param value - The new value.
+   */
+  updateValue(value: Nullable<CharacteristicValue>): Characteristic;
+  /**
    * Sets the state of the characteristic to an errored state.
-   * If a onGet or GET handler is set up, the errored state will be ignored and the characteristic
-   * will always query the latest state by calling the provided handler.
+   * If a {@link onGet} or {@link CharacteristicEventTypes.GET} handler is set up,
+   * the errored state will be ignored and the characteristic will always query the latest state by calling the provided handler.
    *
    * If a generic error object is supplied, the characteristic tries to extract a {@link HAPStatus} code
    * from the error message string. If not possible a generic {@link HAPStatus.SERVICE_COMMUNICATION_FAILURE} will be used.
    * If the supplied error object is an instance of {@link HapStatusError} the corresponding status will be used.
    *
+   * Have a look at the
+   * {@link https://github.com/homebridge/HAP-NodeJS/wiki/Presenting-Erroneous-Accessory-State-to-the-User Presenting Erroneous Accessory State to the User}
+   * guide for more information on how to present erroneous state to the user.
+   *
    * @param error - The error object
+   *
+   * Note: Erroneous state is never **pushed** to the client side. Only, if the HomeKit client requests the current
+   *  state of the Characteristic, the corresponding {@link HapStatusError} is returned. As described above,
+   *  any {@link onGet} or {@link CharacteristicEventTypes.GET} handlers have precedence.
    */
   updateValue(error: Error | HapStatusError): Characteristic;
   /**
-   * This updates the value of the characteristic. If the value changed, a event notification will be sent to all connected
-   * HomeKit controllers which are registered to receive event notifications for this characteristic.
-   *
-   * @param value - The new value.
-   * @param callback - Deprecated parameter there to provide backwards compatibility. Callback is called instantly.
-   * @param context - Passed to the {@link CharacteristicEventTypes.CHANGE} event handler.
-   * @deprecated Parameter callback is deprecated.
-   */
-  updateValue(value: Nullable<CharacteristicValue>, callback?: () => void, context?: CharacteristicContext): Characteristic;
-  /**
-   * This updates the value of the characteristic. If the value changed, a event notification will be sent to all connected
+   * This updates the value of the characteristic. If the value changed, an event notification will be sent to all connected
    * HomeKit controllers which are registered to receive event notifications for this characteristic.
    *
    * @param value - The new value.
@@ -1439,8 +2172,6 @@ export class Characteristic extends EventEmitter {
   updateValue(value: Nullable<CharacteristicValue> | Error | HapStatusError, callback?: () => void, context?: CharacteristicContext): Characteristic {
     if (value instanceof Error) {
       this.statusCode = value instanceof HapStatusError? value.hapStatus: extractHAPStatusFromError(value);
-      // noinspection JSDeprecatedSymbols
-      this.status = value;
 
       if (callback) {
         callback();
@@ -1464,8 +2195,6 @@ export class Characteristic extends EventEmitter {
     }
 
     this.statusCode = HAPStatus.SUCCESS;
-    // noinspection JSDeprecatedSymbols
-    this.status = null;
 
     const oldValue = this.value;
     this.value = value;
@@ -1490,8 +2219,6 @@ export class Characteristic extends EventEmitter {
    */
   public sendEventNotification(value: CharacteristicValue, context?: CharacteristicContext): Characteristic {
     this.statusCode = HAPStatus.SUCCESS;
-    // noinspection JSDeprecatedSymbols
-    this.status = null;
 
     value = this.validateUserInput(value)!;
     const oldValue = this.value;
@@ -1527,8 +2254,6 @@ export class Characteristic extends EventEmitter {
       try {
         let value = await this.getHandler(context, connection);
         this.statusCode = HAPStatus.SUCCESS;
-        // noinspection JSDeprecatedSymbols
-        this.status = null;
 
         try {
           value = this.validateUserInput(value);
@@ -1536,8 +2261,6 @@ export class Characteristic extends EventEmitter {
           this.characteristicWarning(`An illegal value was supplied by the read handler for characteristic: ${error?.message}`,
             CharacteristicWarningType.WARN_MESSAGE, error?.stack);
           this.statusCode = HAPStatus.SERVICE_COMMUNICATION_FAILURE;
-          // noinspection JSDeprecatedSymbols
-          this.status = error;
           return Promise.reject(HAPStatus.SERVICE_COMMUNICATION_FAILURE);
         }
 
@@ -1556,18 +2279,12 @@ export class Characteristic extends EventEmitter {
         if (typeof error === "number") {
           const hapStatusError = new HapStatusError(error);
           this.statusCode = hapStatusError.hapStatus;
-          // noinspection JSDeprecatedSymbols
-          this.status = hapStatusError;
         } else if (error instanceof HapStatusError) {
           this.statusCode = error.hapStatus;
-          // noinspection JSDeprecatedSymbols
-          this.status = error;
         } else {
           this.characteristicWarning(`Unhandled error thrown inside read handler for characteristic: ${error?.message}`,
             CharacteristicWarningType.ERROR_MESSAGE, error?.stack);
           this.statusCode = HAPStatus.SERVICE_COMMUNICATION_FAILURE;
-          // noinspection JSDeprecatedSymbols
-          this.status = error;
         }
         throw this.statusCode;
       }
@@ -1594,25 +2311,17 @@ export class Characteristic extends EventEmitter {
             if (typeof status === "number") {
               const hapStatusError = new HapStatusError(status);
               this.statusCode = hapStatusError.hapStatus;
-              // noinspection JSDeprecatedSymbols
-              this.status = hapStatusError;
             } else if (status instanceof HapStatusError) {
               this.statusCode = status.hapStatus;
-              // noinspection JSDeprecatedSymbols
-              this.status = status;
             } else {
               debug("[%s] Received error from get handler %s", this.displayName, status.stack);
               this.statusCode = extractHAPStatusFromError(status);
-              // noinspection JSDeprecatedSymbols
-              this.status = status;
             }
             reject(this.statusCode);
             return;
           }
 
           this.statusCode = HAPStatus.SUCCESS;
-          // noinspection JSDeprecatedSymbols
-          this.status = null;
 
           value = this.validateUserInput(value);
           const oldValue = this.value;
@@ -1631,8 +2340,6 @@ export class Characteristic extends EventEmitter {
         this.characteristicWarning(`Unhandled error thrown inside read handler for characteristic: ${error?.message}`,
           CharacteristicWarningType.ERROR_MESSAGE, error?.stack);
         this.statusCode = HAPStatus.SERVICE_COMMUNICATION_FAILURE;
-        // noinspection JSDeprecatedSymbols
-        this.status = error;
         reject(HAPStatus.SERVICE_COMMUNICATION_FAILURE);
       }
     });
@@ -1644,15 +2351,13 @@ export class Characteristic extends EventEmitter {
    * @param value - The updated value
    * @param connection - The connection from which the request originated from
    * @param context - Deprecated parameter. There for backwards compatibility.
-   * @returns Promise resolve to void in normal operation. When characteristic supports write response, the
-   *  HAP request requests write response and the set handler returns a write response value, the respective
+   * @returns Promise resolve to void in normal operation. When characteristic supports write-response, HAP
+   *  requests a write-response and the set handler returns a write-response value, the respective
    *  write response value is resolved.
    * @private
    */
   async handleSetRequest(value: CharacteristicValue, connection?: HAPConnection, context?: CharacteristicContext): Promise<CharacteristicValue | void> {
     this.statusCode = HAPStatus.SUCCESS;
-    // noinspection JSDeprecatedSymbols
-    this.status = null;
 
     if (connection !== undefined) {
       // if connection is undefined, the set "request" comes from the setValue method.
@@ -1675,8 +2380,6 @@ export class Characteristic extends EventEmitter {
       try {
         const writeResponse = await this.setHandler(value, context, connection);
         this.statusCode = HAPStatus.SUCCESS;
-        // noinspection JSDeprecatedSymbols
-        this.status = null;
 
         if (writeResponse != null && this.props.perms.includes(Perms.WRITE_RESPONSE)) {
           this.value = this.validateUserInput(writeResponse);
@@ -1698,18 +2401,12 @@ export class Characteristic extends EventEmitter {
         if (typeof error === "number") {
           const hapStatusError = new HapStatusError(error);
           this.statusCode = hapStatusError.hapStatus;
-          // noinspection JSDeprecatedSymbols
-          this.status = hapStatusError;
         } else if (error instanceof HapStatusError) {
           this.statusCode = error.hapStatus;
-          // noinspection JSDeprecatedSymbols
-          this.status = error;
         } else {
           this.characteristicWarning(`Unhandled error thrown inside write handler for characteristic: ${error?.message}`,
             CharacteristicWarningType.ERROR_MESSAGE, error?.stack);
           this.statusCode = HAPStatus.SERVICE_COMMUNICATION_FAILURE;
-          // noinspection JSDeprecatedSymbols
-          this.status = error;
         }
         throw this.statusCode;
       }
@@ -1727,25 +2424,17 @@ export class Characteristic extends EventEmitter {
               if (typeof status === "number") {
                 const hapStatusError = new HapStatusError(status);
                 this.statusCode = hapStatusError.hapStatus;
-                // noinspection JSDeprecatedSymbols
-                this.status = hapStatusError;
               } else if (status instanceof HapStatusError) {
                 this.statusCode = status.hapStatus;
-                // noinspection JSDeprecatedSymbols
-                this.status = status;
               } else {
                 debug("[%s] Received error from set handler %s", this.displayName, status.stack);
                 this.statusCode = extractHAPStatusFromError(status);
-                // noinspection JSDeprecatedSymbols
-                this.status = status;
               }
               reject(this.statusCode);
               return;
             }
 
             this.statusCode = HAPStatus.SUCCESS;
-            // noinspection JSDeprecatedSymbols
-            this.status = null;
 
             if (writeResponse != null && this.props.perms.includes(Perms.WRITE_RESPONSE)) {
               // support write response simply by letting the implementor pass the response as second argument to the callback
@@ -1769,8 +2458,6 @@ export class Characteristic extends EventEmitter {
           this.characteristicWarning(`Unhandled error thrown inside write handler for characteristic: ${error?.message}`,
             CharacteristicWarningType.ERROR_MESSAGE, error?.stack);
           this.statusCode = HAPStatus.SERVICE_COMMUNICATION_FAILURE;
-          // noinspection JSDeprecatedSymbols
-          this.status = error;
           reject(HAPStatus.SERVICE_COMMUNICATION_FAILURE);
         }
       });
@@ -1778,7 +2465,7 @@ export class Characteristic extends EventEmitter {
   }
 
   /**
-   * Called once a HomeKit controller subscribes to events of this characteristics.
+   * Called once a HomeKit controller subscribes to events of this characteristic.
    * @private
    */
   subscribe(): void {
@@ -1789,7 +2476,7 @@ export class Characteristic extends EventEmitter {
   }
 
   /**
-   * Called once a HomeKit controller unsubscribe to events of this characteristics or a HomeKit controller
+   * Called once a HomeKit controller unsubscribe to events of this characteristic or a HomeKit controller
    * which was subscribed to this characteristic disconnects.
    * @private
    */
@@ -1824,10 +2511,6 @@ export class Characteristic extends EventEmitter {
       return ""; // who knows!
     case Formats.TLV8:
       return ""; // who knows!
-    case Formats.DICTIONARY:
-      return {};
-    case Formats.ARRAY:
-      return [];
     case Formats.INT:
     case Formats.FLOAT:
     case Formats.UINT8:
@@ -1954,12 +2637,13 @@ export class Characteristic extends EventEmitter {
 
   /**
    * Checks if the value received from the API call is valid.
-   * It adjust the value where it makes sense, prints a warning where values may be rejected with an error
+   * It adjusts the value where it makes sense, prints a warning where values may be rejected with an error
    * in the future and throws an error which can't be converted to a valid value.
    *
    * @param value - The value received from the API call
+   * @param warningType - Optionally defines the warning type to use when raising a {@link CharacteristicEventTypes.CHARACTERISTIC_WARNING}.
    */
-  private validateUserInput(value?: Nullable<CharacteristicValue>): Nullable<CharacteristicValue> {
+  private validateUserInput(value?: Nullable<CharacteristicValue>, warningType = CharacteristicWarningType.WARN_MESSAGE): Nullable<CharacteristicValue> {
     if (value === null) {
       if (this.UUID === Characteristic.Model.UUID || this.UUID === Characteristic.SerialNumber.UUID) { // mirrors the statement in case: Formats.STRING
         this.characteristicWarning("characteristic must have a non null value otherwise HomeKit will reject this accessory, ignoring new value",
@@ -1976,18 +2660,19 @@ export class Characteristic extends EventEmitter {
        * null is actually a perfectly valid value for characteristics to have.
        * The Home app will show "no response" for some characteristics for which it can't handle null
        * but ultimately its valid and the developers decision what the return.
-       * BUT: out of history hap-nodejs did replaced null with the last known value and thus
+       * BUT: out of history hap-nodejs did replace null with the last known value and thus
        * homebridge devs started to adopting this method as a way of not changing the value in a GET handler.
        * As an intermediate step we kept the behavior but added a warning printed to the console.
        * In a future update we will do the breaking change of return null below!
        */
 
-      if (this.UUID.endsWith(BASE_UUID)) { // we have a apple defined characteristic (at least assuming nobody else uses the UUID namespace)
-        if (this.UUID === ProgrammableSwitchEvent.UUID) {
+      if (this.UUID.endsWith(BASE_UUID)) { // we have an apple defined characteristic (at least assuming nobody else uses the UUID namespace)
+        if (this.UUID === Characteristic.ProgrammableSwitchEvent.UUID) {
           return value; // null is allowed as a value for ProgrammableSwitchEvent
         }
 
-        this.characteristicWarning("characteristic was supplied illegal value: null! Home App will reject null for Apple defined characteristics");
+        this.characteristicWarning("characteristic was supplied illegal value: null! Home App will reject null for Apple defined characteristics",
+          warningType);
 
         // if the value has been set previously, return it now, otherwise continue with validation to have a default value set.
         if (this.value !== null) {
@@ -2011,7 +2696,7 @@ export class Characteristic extends EventEmitter {
         return value === "1" || value === "true";
       }
 
-      this.characteristicWarning("characteristic value expected boolean and received " + typeof value);
+      this.characteristicWarning("characteristic value expected boolean and received " + typeof value, warningType);
       return false;
     }
     case Formats.INT:
@@ -2027,12 +2712,12 @@ export class Characteristic extends EventEmitter {
         value = this.props.format === Formats.FLOAT ? parseFloat(value) : parseInt(value, 10);
       }
       if (typeof value !== "number" || !Number.isFinite(value)) {
-        this.characteristicWarning(`characteristic value expected valid finite number and received "${value}" (${typeof value})`);
+        this.characteristicWarning(`characteristic value expected valid finite number and received "${value}" (${typeof value})`, warningType);
         value = typeof this.value === "number" ? this.value : this.props.minValue || 0;
       }
 
       const numericMin = maxWithUndefined(this.props.minValue, numericLowerBound(this.props.format));
-      const numericMax = minWithUndefined(this.props.maxValue, numericUpperBound(this.props.format));
+      let numericMax = minWithUndefined(this.props.maxValue, numericUpperBound(this.props.format));
 
       let stepValue: number | undefined = undefined;
       if (this.props.format === Formats.FLOAT) {
@@ -2043,31 +2728,34 @@ export class Characteristic extends EventEmitter {
 
       if (stepValue != null && stepValue > 0) {
         const minValue = this.props.minValue != null ? this.props.minValue : 0;
+        if (numericMax != null) {
+          numericMax = stepValue * Math.floor((numericMax - minValue) / stepValue) + minValue;
+        }
         value = stepValue * Math.round((value - minValue) / stepValue) + minValue;
       }
 
       if (numericMin != null && value < numericMin) {
-        this.characteristicWarning(`characteristic was supplied illegal value: number ${value} exceeded minimum of ${numericMin}`);
+        this.characteristicWarning(`characteristic was supplied illegal value: number ${value} exceeded minimum of ${numericMin}`, warningType);
         value = numericMin;
       }
       if (numericMax != null && value > numericMax) {
-        this.characteristicWarning(`characteristic was supplied illegal value: number ${value} exceeded maximum of ${numericMax}`);
+        this.characteristicWarning(`characteristic was supplied illegal value: number ${value} exceeded maximum of ${numericMax}`, warningType);
         value = numericMax;
       }
 
       if (this.props.validValues && !this.props.validValues.includes(value)) {
-        this.characteristicWarning(`characteristic value ${value} is not contained in valid values array`);
+        this.characteristicWarning(`characteristic value ${value} is not contained in valid values array`, warningType);
         return this.props.validValues.includes(this.value as number) ? this.value : (this.props.validValues[0] || 0);
       }
 
       if (this.props.validValueRanges && this.props.validValueRanges.length === 2) {
         if (value < this.props.validValueRanges[0]) {
-          this.characteristicWarning(`characteristic was supplied illegal value: number ${value} not contained in valid value range of \
-          ${this.props.validValueRanges}, supplying illegal values will throw errors in the future`);
+          this.characteristicWarning(`characteristic was supplied illegal value: number ${value} not contained in valid value range of `
+            + `${this.props.validValueRanges}, supplying illegal values will throw errors in the future`, warningType);
           value = this.props.validValueRanges[0];
         } else if (value > this.props.validValueRanges[1]) {
-          this.characteristicWarning(`characteristic was supplied illegal value: number ${value} not contained in valid value range of \
-          ${this.props.validValueRanges}, supplying illegal values will throw errors in the future`);
+          this.characteristicWarning(`characteristic was supplied illegal value: number ${value} not contained in valid value range of `
+            + `${this.props.validValueRanges}, supplying illegal values will throw errors in the future`, warningType);
           value = this.props.validValueRanges[1];
         }
       }
@@ -2077,25 +2765,29 @@ export class Characteristic extends EventEmitter {
     case Formats.STRING: {
       if (typeof value === "number") {
         this.characteristicWarning("characteristic was supplied illegal value: number instead of string, " +
-          "supplying illegal values will throw errors in the future");
+          "supplying illegal values will throw errors in the future", warningType);
         value = String(value);
       }
       if (typeof value !== "string") {
-        this.characteristicWarning("characteristic value expected string and received " + (typeof value));
+        this.characteristicWarning("characteristic value expected string and received " + (typeof value), warningType);
         value = typeof this.value === "string" ? this.value : value + "";
       }
 
       // mirrors the case value = null at the beginning
       if (value.length <= 1 && (this.UUID === Characteristic.Model.UUID || this.UUID === Characteristic.SerialNumber.UUID)) {
-        this.characteristicWarning(`[${this.displayName}] characteristic must have a length of more than 1 character otherwise \
-        HomeKit will reject this accessory, ignoring new value`);
+        this.characteristicWarning(`[${this.displayName}] characteristic must have a length of more than 1 character otherwise`
+          + ` HomeKit will reject this accessory, ignoring new value ${warningType}`);
         return this.value; // just return the current value
       }
 
       const maxLength = this.props.maxLen ?? 64; // default is 64 (max is 256 which is set in setProps)
       if (value.length > maxLength) {
-        this.characteristicWarning(`characteristic was supplied illegal value: string '${value}' exceeded max length of ${maxLength}`);
+        this.characteristicWarning(`characteristic was supplied illegal value: string '${value}' exceeded max length of ${maxLength}`, warningType);
         value = value.substring(0, maxLength);
+      }
+
+      if (value.length > 0 && this.UUID === Characteristic.ConfiguredName.UUID) {
+        checkName(this.displayName, "ConfiguredName", value);
       }
 
       return value;
@@ -2112,7 +2804,7 @@ export class Characteristic extends EventEmitter {
       return value;
     case Formats.TLV8:
       if (value === undefined) {
-        this.characteristicWarning("characteristic was supplied illegal value: undefined");
+        this.characteristicWarning("characteristic was supplied illegal value: undefined", warningType);
         return this.value;
       }
       return value; // we trust that this is valid tlv8
@@ -2285,3 +2977,8 @@ export class Characteristic extends EventEmitter {
   }
 
 }
+
+// We have a cyclic dependency problem. Within this file we have the definitions of "./definitions" as
+// type imports only (in order to define the static properties). Setting those properties is done outside
+// this file, within the definition files. Therefore, we import it at the end of this file. Seems weird, but is important.
+import "./definitions/CharacteristicDefinitions";

@@ -1,16 +1,10 @@
 import assert from "assert";
 import createDebug from "debug";
 import { EventEmitter } from "events";
-import { ServiceJsonObject } from "../internal-types";
-import { CharacteristicValue, Nullable, WithUUID } from "../types";
+import { CharacteristicValue, Nullable, ServiceJsonObject, WithUUID } from "../types";
 import { CharacteristicWarning, CharacteristicWarningType } from "./Accessory";
-import {
-  Characteristic,
-  CharacteristicChange,
-  CharacteristicEventTypes,
-  SerializedCharacteristic,
-} from "./Characteristic";
-import {
+import { Characteristic, CharacteristicChange, CharacteristicEventTypes, SerializedCharacteristic } from "./Characteristic";
+import type {
   AccessCode,
   AccessControl,
   AccessoryInformation,
@@ -22,9 +16,6 @@ import {
   Assistant,
   AudioStreamManagement,
   Battery,
-  BridgeConfiguration,
-  BridgingState,
-  CameraControl,
   CameraOperatingMode,
   CameraRecordingManagement,
   CameraRTPStreamManagement,
@@ -40,6 +31,7 @@ import {
   Fanv2,
   Faucet,
   FilterMaintenance,
+  FirmwareUpdate,
   GarageDoorOpener,
   HeaterCooler,
   HumidifierDehumidifier,
@@ -70,6 +62,7 @@ import {
   StatefulProgrammableSwitch,
   StatelessProgrammableSwitch,
   Switch,
+  TapManagement,
   TargetControl,
   TargetControlManagement,
   Television,
@@ -77,7 +70,6 @@ import {
   TemperatureSensor,
   Thermostat,
   ThreadTransport,
-  TimeInformation,
   TransferTransportManagement,
   Tunnel,
   Valve,
@@ -89,7 +81,9 @@ import {
 } from "./definitions";
 import { IdentifierCache } from "./model/IdentifierCache";
 import { HAPConnection } from "./util/eventedhttp";
+import { HapStatusError } from "./util/hapStatusError";
 import { toShortForm } from "./util/uuid";
+import { checkName } from "./util/checkName";
 
 const debug = createDebug("HAP-NodeJS:Service");
 
@@ -99,7 +93,7 @@ const debug = createDebug("HAP-NodeJS:Service");
 const MAX_CHARACTERISTICS = 100;
 
 /**
- * @private
+ * @group Service
  */
 export interface SerializedService {
   displayName: string,
@@ -114,22 +108,31 @@ export interface SerializedService {
   optionalCharacteristics?: SerializedCharacteristic[],
 }
 
-export type ServiceId = string; // string with the format: UUID + (subtype | "")
+/**
+ * string with the format: `UUID + (subtype | "")`
+ *
+ * @group Service
+ */
+export type ServiceId = string;
 
+/**
+ * @group Service
+ */
 export type ServiceCharacteristicChange = CharacteristicChange & { characteristic: Characteristic };
 
-// noinspection JSUnusedGlobalSymbols
 /**
- * @deprecated Use ServiceEventTypes instead
+ * @group Service
  */
-export type EventService = ServiceEventTypes.CHARACTERISTIC_CHANGE | ServiceEventTypes.SERVICE_CONFIGURATION_CHANGE;
-
 export const enum ServiceEventTypes {
   CHARACTERISTIC_CHANGE = "characteristic-change",
   SERVICE_CONFIGURATION_CHANGE = "service-configurationChange",
   CHARACTERISTIC_WARNING = "characteristic-warning",
 }
 
+/**
+ * @group Service
+ */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface Service {
   on(event: "characteristic-change", listener: (change: ServiceCharacteristicChange) => void): this;
   on(event: "service-configurationChange", listener: () => void): this;
@@ -145,7 +148,7 @@ export declare interface Service {
  * "Door Lock Mechanism" service might contain two values, one for the "desired lock state" and one for the
  * "current lock state". A particular Service is distinguished from others by its "type", which is a UUID.
  * HomeKit provides a set of known Service UUIDs defined in HomeKit.ts along with a corresponding
- * concrete subclass that you can instantiate directly to setup the necessary values. These natively-supported
+ * concrete subclass that you can instantiate directly to set up the necessary values. These natively-supported
  * Services are expected to contain a particular set of Characteristics.
  *
  * Unlike Characteristics, where you cannot have two Characteristics with the same UUID in the same Service,
@@ -159,118 +162,308 @@ export declare interface Service {
  * You can also define custom Services by providing your own UUID for the type that you generate yourself.
  * Custom Services can contain an arbitrary set of Characteristics, but Siri will likely not be able to
  * work with these.
+ *
+ * @group Service
  */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class Service extends EventEmitter {
   // Service MUST NOT have any other static variables
 
   // Pattern below is for automatic detection of the section of defined services. Used by the generator
   // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+  /**
+   * @group Service Definitions
+   */
   public static AccessCode: typeof AccessCode;
+  /**
+   * @group Service Definitions
+   */
   public static AccessControl: typeof AccessControl;
+  /**
+   * @group Service Definitions
+   */
   public static AccessoryInformation: typeof AccessoryInformation;
+  /**
+   * @group Service Definitions
+   */
   public static AccessoryMetrics: typeof AccessoryMetrics;
+  /**
+   * @group Service Definitions
+   */
   public static AccessoryRuntimeInformation: typeof AccessoryRuntimeInformation;
+  /**
+   * @group Service Definitions
+   */
   public static AirPurifier: typeof AirPurifier;
+  /**
+   * @group Service Definitions
+   */
   public static AirQualitySensor: typeof AirQualitySensor;
+  /**
+   * @group Service Definitions
+   */
   public static AssetUpdate: typeof AssetUpdate;
+  /**
+   * @group Service Definitions
+   */
   public static Assistant: typeof Assistant;
+  /**
+   * @group Service Definitions
+   */
   public static AudioStreamManagement: typeof AudioStreamManagement;
+  /**
+   * @group Service Definitions
+   */
   public static Battery: typeof Battery;
   /**
-   * @deprecated Please use {@link Service.Battery}.
+   * @group Service Definitions
    */
-  public static BatteryService: typeof Battery;
-  /**
-   * @deprecated Removed and not used anymore
-   */
-  public static BridgeConfiguration: typeof BridgeConfiguration;
-  /**
-   * @deprecated Removed and not used anymore
-   */
-  public static BridgingState: typeof BridgingState;
-  /**
-   * @deprecated This service has no usage anymore and will be ignored by iOS
-   */
-  public static CameraControl: typeof CameraControl;
-  /**
-   * @deprecated Please use {@link Service.CameraRecordingManagement}.
-   */
-  public static CameraEventRecordingManagement: typeof CameraRecordingManagement;
   public static CameraOperatingMode: typeof CameraOperatingMode;
+  /**
+   * @group Service Definitions
+   */
   public static CameraRecordingManagement: typeof CameraRecordingManagement;
+  /**
+   * @group Service Definitions
+   */
   public static CameraRTPStreamManagement: typeof CameraRTPStreamManagement;
+  /**
+   * @group Service Definitions
+   */
   public static CarbonDioxideSensor: typeof CarbonDioxideSensor;
+  /**
+   * @group Service Definitions
+   */
   public static CarbonMonoxideSensor: typeof CarbonMonoxideSensor;
+  /**
+   * @group Service Definitions
+   * @deprecated Removed
+   */
   public static CloudRelay: typeof CloudRelay;
+  /**
+   * @group Service Definitions
+   */
   public static ContactSensor: typeof ContactSensor;
+  /**
+   * @group Service Definitions
+   */
   public static DataStreamTransportManagement: typeof DataStreamTransportManagement;
+  /**
+   * @group Service Definitions
+   */
   public static Diagnostics: typeof Diagnostics;
+  /**
+   * @group Service Definitions
+   */
   public static Door: typeof Door;
+  /**
+   * @group Service Definitions
+   */
   public static Doorbell: typeof Doorbell;
+  /**
+   * @group Service Definitions
+   */
   public static Fan: typeof Fan;
+  /**
+   * @group Service Definitions
+   */
   public static Fanv2: typeof Fanv2;
+  /**
+   * @group Service Definitions
+   */
   public static Faucet: typeof Faucet;
+  /**
+   * @group Service Definitions
+   */
   public static FilterMaintenance: typeof FilterMaintenance;
+  /**
+   * @group Service Definitions
+   */
+  public static FirmwareUpdate: typeof FirmwareUpdate;
+  /**
+   * @group Service Definitions
+   */
   public static GarageDoorOpener: typeof GarageDoorOpener;
+  /**
+   * @group Service Definitions
+   */
   public static HeaterCooler: typeof HeaterCooler;
+  /**
+   * @group Service Definitions
+   */
   public static HumidifierDehumidifier: typeof HumidifierDehumidifier;
+  /**
+   * @group Service Definitions
+   */
   public static HumiditySensor: typeof HumiditySensor;
+  /**
+   * @group Service Definitions
+   */
   public static InputSource: typeof InputSource;
+  /**
+   * @group Service Definitions
+   */
   public static IrrigationSystem: typeof IrrigationSystem;
+  /**
+   * @group Service Definitions
+   */
   public static LeakSensor: typeof LeakSensor;
+  /**
+   * @group Service Definitions
+   */
   public static Lightbulb: typeof Lightbulb;
+  /**
+   * @group Service Definitions
+   */
   public static LightSensor: typeof LightSensor;
+  /**
+   * @group Service Definitions
+   */
   public static LockManagement: typeof LockManagement;
+  /**
+   * @group Service Definitions
+   */
   public static LockMechanism: typeof LockMechanism;
+  /**
+   * @group Service Definitions
+   */
   public static Microphone: typeof Microphone;
+  /**
+   * @group Service Definitions
+   */
   public static MotionSensor: typeof MotionSensor;
+  /**
+   * @group Service Definitions
+   */
   public static NFCAccess: typeof NFCAccess;
+  /**
+   * @group Service Definitions
+   */
   public static OccupancySensor: typeof OccupancySensor;
+  /**
+   * @group Service Definitions
+   */
   public static Outlet: typeof Outlet;
+  /**
+   * @group Service Definitions
+   */
   public static Pairing: typeof Pairing;
+  /**
+   * @group Service Definitions
+   */
   public static PowerManagement: typeof PowerManagement;
+  /**
+   * @group Service Definitions
+   */
   public static ProtocolInformation: typeof ProtocolInformation;
   /**
-   * @deprecated Please use {@link Service.CloudRelay}.
+   * @group Service Definitions
    */
-  public static Relay: typeof CloudRelay;
   public static SecuritySystem: typeof SecuritySystem;
+  /**
+   * @group Service Definitions
+   */
   public static ServiceLabel: typeof ServiceLabel;
+  /**
+   * @group Service Definitions
+   */
   public static Siri: typeof Siri;
+  /**
+   * @group Service Definitions
+   */
   public static SiriEndpoint: typeof SiriEndpoint;
   /**
-   * @deprecated Please use {@link Service.Slats}.
+   * @group Service Definitions
    */
-  public static Slat: typeof Slats;
   public static Slats: typeof Slats;
+  /**
+   * @group Service Definitions
+   */
   public static SmartSpeaker: typeof SmartSpeaker;
+  /**
+   * @group Service Definitions
+   */
   public static SmokeSensor: typeof SmokeSensor;
+  /**
+   * @group Service Definitions
+   */
   public static Speaker: typeof Speaker;
+  /**
+   * @group Service Definitions
+   */
   public static StatefulProgrammableSwitch: typeof StatefulProgrammableSwitch;
+  /**
+   * @group Service Definitions
+   */
   public static StatelessProgrammableSwitch: typeof StatelessProgrammableSwitch;
+  /**
+   * @group Service Definitions
+   */
   public static Switch: typeof Switch;
+  /**
+   * @group Service Definitions
+   */
+  public static TapManagement: typeof TapManagement;
+  /**
+   * @group Service Definitions
+   */
   public static TargetControl: typeof TargetControl;
+  /**
+   * @group Service Definitions
+   */
   public static TargetControlManagement: typeof TargetControlManagement;
+  /**
+   * @group Service Definitions
+   */
   public static Television: typeof Television;
+  /**
+   * @group Service Definitions
+   */
   public static TelevisionSpeaker: typeof TelevisionSpeaker;
+  /**
+   * @group Service Definitions
+   */
   public static TemperatureSensor: typeof TemperatureSensor;
+  /**
+   * @group Service Definitions
+   */
   public static Thermostat: typeof Thermostat;
+  /**
+   * @group Service Definitions
+   */
   public static ThreadTransport: typeof ThreadTransport;
   /**
-   * @deprecated Removed and not used anymore
+   * @group Service Definitions
    */
-  public static TimeInformation: typeof TimeInformation;
   public static TransferTransportManagement: typeof TransferTransportManagement;
+  /**
+   * @group Service Definitions
+   * @deprecated Removed
+   */
   public static Tunnel: typeof Tunnel;
   /**
-   * @deprecated Please use {@link Service.Tunnel}.
+   * @group Service Definitions
    */
-  public static TunneledBTLEAccessoryService: typeof Tunnel;
   public static Valve: typeof Valve;
+  /**
+   * @group Service Definitions
+   */
   public static WiFiRouter: typeof WiFiRouter;
+  /**
+   * @group Service Definitions
+   */
   public static WiFiSatellite: typeof WiFiSatellite;
+  /**
+   * @group Service Definitions
+   */
   public static WiFiTransport: typeof WiFiTransport;
+  /**
+   * @group Service Definitions
+   */
   public static Window: typeof Window;
+  /**
+   * @group Service Definitions
+   */
   public static WindowCovering: typeof WindowCovering;
   // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
@@ -307,6 +500,7 @@ export class Service extends EventEmitter {
     // if you don't provide a display name, some HomeKit apps may choose to hide the device.
     if (displayName) {
       // create the characteristic if necessary
+      checkName(this.displayName, "Name", displayName);
       const nameCharacteristic =
         this.getCharacteristic(Characteristic.Name) ||
         this.addCharacteristic(Characteristic.Name);
@@ -316,7 +510,7 @@ export class Service extends EventEmitter {
   }
 
   /**
-   * Returns an id which uniquely identifies an service on the associated accessory.
+   * Returns an id which uniquely identifies a service on the associated accessory.
    * The serviceId is a concatenation of the UUID for the service (defined by HAP) and the subtype (could be empty)
    * which is programmatically defined by the programmer.
    *
@@ -365,7 +559,7 @@ export class Service extends EventEmitter {
    * This will happen immediately, if the service was already added to an accessory, or later
    * when the service gets added to an accessory.
    *
-   * @param isPrimary {boolean} - optional boolean (default true) if the service should be the primary service
+   * @param isPrimary - optional boolean (default true) if the service should be the primary service
    */
   public setPrimaryService(isPrimary = true): void {
     this.isPrimaryService = isPrimary;
@@ -375,7 +569,7 @@ export class Service extends EventEmitter {
   /**
    * Marks the service as hidden
    *
-   * @param isHidden {boolean} - optional boolean (default true) if the service should be marked hidden
+   * @param isHidden - optional boolean (default true) if the service should be marked hidden
    */
   public setHiddenService(isHidden = true): void {
     this.isHiddenService = isHidden;
@@ -433,14 +627,16 @@ export class Service extends EventEmitter {
     for (const characteristic of this.characteristics) {
       if (typeof name === "string" && characteristic.displayName === name) {
         return characteristic;
-        // @ts-expect-error: UUID field
-      } else if (typeof name === "function" && ((characteristic instanceof name) || (name.UUID === characteristic.UUID))) {
-        return characteristic;
+      } else {
+        // @ts-expect-error ('UUID' does not exist on type 'never')
+        if (typeof name === "function" && ((characteristic instanceof name) || (name.UUID === characteristic.UUID))) {
+          return characteristic;
+        }
       }
     }
     if (typeof name === "function") {
       for (const characteristic of this.optionalCharacteristics) {
-        // @ts-expect-error: UUID field
+        // @ts-expect-error ('UUID' does not exist on type 'never')
         if ((characteristic instanceof name) || (name.UUID === characteristic.UUID)) {
           return this.addCharacteristic(name);
         }
@@ -448,7 +644,6 @@ export class Service extends EventEmitter {
 
       const instance = this.addCharacteristic(name);
       // Not found in optional Characteristics. Adding anyway, but warning about it if it isn't the Name.
-      // @ts-expect-error: UUID field
       if (name.UUID !== Characteristic.Name.UUID) {
         this.emitCharacteristicWarningEvent(instance, CharacteristicWarningType.WARN_MESSAGE,
           "Characteristic not in required or optional characteristic section for service " + this.constructor.name + ". Adding anyway.");
@@ -463,21 +658,97 @@ export class Service extends EventEmitter {
     for (const characteristic of this.characteristics) {
       if (typeof name === "string" && characteristic.displayName === name) {
         return true;
-        // @ts-expect-error: UUID field
-      } else if (typeof name === "function" && ((characteristic instanceof name) || (name.UUID === characteristic.UUID))) {
-        return true;
+      } else {
+        // @ts-expect-error ('UUID' does not exist on type 'never')
+        if (typeof name === "function" && ((characteristic instanceof name) || (name.UUID === characteristic.UUID))) {
+          return true;
+        }
       }
     }
     return false;
   }
 
-  public setCharacteristic<T extends WithUUID<{new (): Characteristic}>>(name: string | T, value: CharacteristicValue): Service {
+  /**
+   * This updates the value by calling the {@link CharacteristicEventTypes.SET} event handler associated with the characteristic.
+   * This acts the same way as when a HomeKit controller sends a `/characteristics` request to update the characteristic.
+   * An event notification will be sent to all connected HomeKit controllers which are registered
+   * to receive event notifications for this characteristic.
+   *
+   * This method behaves like a {@link Characteristic.updateValue} call with the addition that the own {@link CharacteristicEventTypes.SET}
+   * event handler is called.
+   *
+   * @param name - The name or the constructor of the desired {@link Characteristic}.
+   * @param value - The updated value.
+   *
+   * Note: If you don't want the {@link CharacteristicEventTypes.SET} to be called, refer to {@link updateCharacteristic}.
+   */
+  public setCharacteristic<T extends WithUUID<{new (): Characteristic}>>(name: string | T, value: CharacteristicValue): Service;
+  /**
+   * Sets the state of the characteristic to an errored state.
+   *
+   * If a {@link Characteristic.onGet} or {@link CharacteristicEventTypes.GET} handler is set up,
+   * the errored state will be ignored and the characteristic will always query the latest state by calling the provided handler.
+   *
+   * If a generic error object is supplied, the characteristic tries to extract a {@link HAPStatus} code
+   * from the error message string. If not possible a generic {@link HAPStatus.SERVICE_COMMUNICATION_FAILURE} will be used.
+   * If the supplied error object is an instance of {@link HapStatusError} the corresponding status will be used.
+   *
+   * This doesn't call any registered {@link Characteristic.onSet} or {@link CharacteristicEventTypes.SET} handlers.
+   *
+   * Have a look at the
+   * {@link https://github.com/homebridge/HAP-NodeJS/wiki/Presenting-Erroneous-Accessory-State-to-the-User Presenting Erroneous Accessory State to the User}
+   * guide for more information on how to present erroneous state to the user.
+   *
+   * @param name - The name or the constructor of the desired {@link Characteristic}.
+   * @param error - The error object
+   *
+   * Note: Erroneous state is never **pushed** to the client side. Only, if the HomeKit client requests the current
+   *  state of the Characteristic, the corresponding {@link HapStatusError} is returned. As described above,
+   *  any {@link Characteristic.onGet} or {@link CharacteristicEventTypes.GET} handlers have preference.
+   */
+  public setCharacteristic<T extends WithUUID<{new (): Characteristic}>>(name: string | T, error: HapStatusError | Error): Service
+  public setCharacteristic<T extends WithUUID<{new (): Characteristic}>>(
+    name: string | T,
+    value: CharacteristicValue | HapStatusError | Error,
+  ): Service {
+    // @ts-expect-error: We know that both overloads exists individually. There is just no publicly exposed type for that!
     this.getCharacteristic(name)!.setValue(value);
     return this; // for chaining
   }
 
-  // A function to only updating the remote value, but not firing the 'set' event.
-  public updateCharacteristic<T extends WithUUID<{new (): Characteristic}>>(name: string | T, value: CharacteristicValue): Service {
+  /**
+   * This updates the value of the characteristic. If the value changed, an event notification will be sent to all connected
+   * HomeKit controllers which are registered to receive event notifications for this characteristic.
+   *
+   * @param name - The name or the constructor of the desired {@link Characteristic}.
+   * @param value - The new value.
+   */
+  public updateCharacteristic<T extends WithUUID<{new (): Characteristic}>>(name: string | T, value: Nullable<CharacteristicValue>): Service;
+  /**
+   * Sets the state of the characteristic to an errored state.
+   * If a {@link Characteristic.onGet} or {@link CharacteristicEventTypes.GET} handler is set up,
+   * the errored state will be ignored and the characteristic will always query the latest state by calling the provided handler.
+   *
+   * If a generic error object is supplied, the characteristic tries to extract a {@link HAPStatus} code
+   * from the error message string. If not possible a generic {@link HAPStatus.SERVICE_COMMUNICATION_FAILURE} will be used.
+   * If the supplied error object is an instance of {@link HapStatusError} the corresponding status will be used.
+   *
+   * @param name - The name or the constructor of the desired {@link Characteristic}.
+   * @param error - The error object
+   *
+   * Have a look at the
+   * {@link https://github.com/homebridge/HAP-NodeJS/wiki/Presenting-Erroneous-Accessory-State-to-the-User Presenting Erroneous Accessory State to the User}
+   * guide for more information on how to present erroneous state to the user.
+   *
+   * Note: Erroneous state is never **pushed** to the client side. Only, if the HomeKit client requests the current
+   *  state of the Characteristic, the corresponding {@link HapStatusError} is returned. As described above,
+   *  any {@link Characteristic.onGet} or {@link CharacteristicEventTypes.GET} handlers have precedence.
+   */
+  public updateCharacteristic<T extends WithUUID<{new (): Characteristic}>>(name: string | T, error: HapStatusError | Error): Service
+  public updateCharacteristic<T extends WithUUID<{new (): Characteristic}>>(
+    name: string | T,
+    value: Nullable<CharacteristicValue> | HapStatusError | Error,
+  ): Service {
     this.getCharacteristic(name)!.updateValue(value);
     return this;
   }
@@ -496,7 +767,7 @@ export class Service extends EventEmitter {
   /**
    * This method was created to copy all characteristics from another service to this.
    * It's only adopting is currently in homebridge to merge the AccessoryInformation service. So some things
-   * my be explicitly tailored towards this use case.
+   * may be explicitly tailored towards this use case.
    *
    * It will not remove characteristics which are present currently but not added on the other characteristic.
    * It will not replace the characteristic if the value is falsy (except of '0' or 'false')
@@ -517,7 +788,7 @@ export class Service extends EventEmitter {
         delete foreignCharacteristics[characteristic.UUID];
 
         if (!foreignCharacteristic.value && foreignCharacteristic.value !== 0 && foreignCharacteristic.value !== false) {
-          return; // ignore falsy values except if its the number zero or literally false
+          return; // ignore falsy values except if it's the number zero or literally false
         }
 
         characteristic.replaceBy(foreignCharacteristic);
@@ -757,3 +1028,8 @@ export class Service extends EventEmitter {
   }
 
 }
+
+// We have a cyclic dependency problem. Within this file we have the definitions of "./definitions" as
+// type imports only (in order to define the static properties). Setting those properties is done outside
+// this file, within the definition files. Therefore, we import it at the end of this file. Seems weird, but is important.
+import "./definitions/ServiceDefinitions";

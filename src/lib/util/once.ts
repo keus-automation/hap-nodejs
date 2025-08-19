@@ -1,4 +1,9 @@
-// eslint-disable-next-line @typescript-eslint/ban-types
+/**
+ * Function wrapper to ensure a function/callback is only called once.
+ *
+ * @group Utils
+ */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export function once<T extends Function>(func: T): T {
   let called = false;
 

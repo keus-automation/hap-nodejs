@@ -1,5 +1,4 @@
 import assert from "assert";
-import { MulticastOptions } from "bonjour-hap";
 import crypto from "crypto";
 import createDebug from "debug";
 import { EventEmitter } from "events";
@@ -12,26 +11,24 @@ import {
   CharacteristicsReadResponse,
   CharacteristicsWriteRequest,
   CharacteristicsWriteResponse,
+  CharacteristicValue,
   CharacteristicWrite,
   CharacteristicWriteData,
-  PartialCharacteristicReadData,
-  PartialCharacteristicWriteData,
-  ResourceRequest,
-  ResourceRequestType,
-} from "../internal-types";
-import {
-  CharacteristicValue,
+  ConstructorArgs,
   HAPPincode,
   InterfaceName,
   IPAddress,
   MacAddress,
   Nullable,
+  PartialCharacteristicReadData,
+  PartialCharacteristicWriteData,
+  ResourceRequest,
+  ResourceRequestType,
   VoidCallback,
   WithUUID,
 } from "../types";
-import { Advertiser, AdvertiserEvent, BonjourHAPAdvertiser, CiaoAdvertiser, AvahiAdvertiser } from "./Advertiser";
+import { Advertiser, AdvertiserEvent, AvahiAdvertiser, BonjourHAPAdvertiser, CiaoAdvertiser, ResolvedAdvertiser } from "./Advertiser";
 // noinspection JSDeprecatedSymbols
-import { LegacyCameraSource, LegacyCameraSourceAdapter, StreamController } from "./camera";
 import {
   Access,
   ChangeReason,
@@ -43,7 +40,6 @@ import {
 } from "./Characteristic";
 import {
   CameraController,
-  CameraControllerOptions,
   Controller,
   ControllerConstructor,
   ControllerIdentifier,
@@ -75,12 +71,17 @@ import { EventName, HAPConnection, HAPUsername } from "./util/eventedhttp";
 import { formatOutgoingCharacteristicValue } from "./util/request-util";
 import * as uuid from "./util/uuid";
 import { toShortForm } from "./util/uuid";
+import { checkName } from "./util/checkName";
 
 const debug = createDebug("HAP-NodeJS:Accessory");
 const MAX_ACCESSORIES = 149; // Maximum number of bridged accessories per bridge.
 const MAX_SERVICES = 100;
 
-// Known category values. Category is a hint to iOS clients about what "type" of Accessory this represents, for UI only.
+/**
+ * Known category values. Category is a hint to iOS clients about what "type" of Accessory this represents, for UI only.
+ *
+ * @group Accessory
+ */
 export const enum Categories {
   // noinspection JSUnusedGlobalSymbols
   OTHER = 1,
@@ -94,6 +95,7 @@ export const enum Categories {
   THERMOSTAT = 9,
   SENSOR = 10,
   ALARM_SYSTEM = 11,
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   SECURITY_SYSTEM = 11, //Added to conform to HAP naming
   DOOR = 12,
   WINDOW = 13,
@@ -101,6 +103,7 @@ export const enum Categories {
   PROGRAMMABLE_SWITCH = 15,
   RANGE_EXTENDER = 16,
   CAMERA = 17,
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   IP_CAMERA = 17, //Added to conform to HAP naming
   VIDEO_DOORBELL = 18,
   AIR_PURIFIER = 19,
@@ -124,7 +127,7 @@ export const enum Categories {
 }
 
 /**
- * @private
+ * @group Accessory
  */
 export interface SerializedAccessory {
   displayName: string,
@@ -138,20 +141,29 @@ export interface SerializedAccessory {
 }
 
 /**
- * @private
+ * @group Controller API
  */
 export interface SerializedControllerContext {
   type: ControllerIdentifier, // this field is called type out of history
   services: SerializedServiceMap,
 }
 
+/**
+ * @group Controller API
+ */
 export type SerializedServiceMap = Record<string, ServiceId>; // maps controller defined name (from the ControllerServiceMap) to serviceId
 
+/**
+ * @group Controller API
+ */
 export interface ControllerContext {
   controller: Controller
   serviceMap: ControllerServiceMap,
 }
 
+/**
+ * @group Accessory
+ */
 export const enum CharacteristicWarningType {
   SLOW_WRITE = "slow-write",
   TIMEOUT_WRITE = "timeout-write",
@@ -162,6 +174,9 @@ export const enum CharacteristicWarningType {
   DEBUG_MESSAGE = "debug-message",
 }
 
+/**
+ * @group Accessory
+ */
 export interface CharacteristicWarning {
   characteristic: Characteristic,
   type: CharacteristicWarningType,
@@ -171,11 +186,8 @@ export interface CharacteristicWarning {
 }
 
 /**
- * @deprecated
+ * @group Accessory
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CharacteristicEvents = Record<string, any>;
-
 export interface PublishInfo {
   username: MacAddress;
   pincode: HAPPincode;
@@ -183,7 +195,7 @@ export interface PublishInfo {
    * Specify the category for the HomeKit accessory.
    * The category is used only in the mdns advertisement and specifies the devices type
    * for the HomeKit controller.
-   * Currently this only affects the icon shown in the pairing screen.
+   * Currently, this only affects the icon shown in the pairing screen.
    * For the Television and Smart Speaker service it also affects the icon shown in
    * the Home app when paired.
    */
@@ -226,8 +238,8 @@ export interface PublishInfo {
    *      This will bind the HAP server to the address 0.0.0.0.
    *      The mdns advertisement will only advertise the A record 169.254.104.90.
    *      If the given network interface of that address encounters an ip address change (to a different address),
-   *      the mdns advertisement will result in not advertising a address at all.
-   *      So it is advised to specify a interface name instead of a specific address.
+   *      the mdns advertisement will result in not advertising an address at all.
+   *      So it is advised to specify an interface name instead of a specific address.
    *      This is identical with ipv6 addresses.
    *
    *  - bind: ["169.254.104.90", "192.168.1.4"]
@@ -236,8 +248,8 @@ export interface PublishInfo {
    *      :: if a mixture or only ipv6 addresses are supplied).
    *      The mdns advertisement will only advertise the specified ip addresses.
    *      If the given network interface of that address encounters an ip address change (to different addresses),
-   *      the mdns advertisement will result in not advertising a address at all.
-   *      So it is advised to specify a interface name instead of a specific address.
+   *      the mdns advertisement will result in not advertising an address at all.
+   *      So it is advised to specify an interface name instead of a specific address.
    *
    */
   bind?: (InterfaceName | IPAddress) | (InterfaceName | IPAddress)[];
@@ -246,11 +258,6 @@ export interface PublishInfo {
    * When undefined port 0 will be used resulting in a random port.
    */
   port?: number;
-  /**
-   * Used to define custom MDNS options. Is not used anymore.
-   * @deprecated
-   */
-  mdns?: MulticastOptions;
   /**
    * If this option is set to true, HAP-NodeJS will add identifying material (based on {@link username})
    * to the end of the accessory display name (and bonjour instance name).
@@ -261,13 +268,11 @@ export interface PublishInfo {
    * Defines the advertiser used with the published Accessory.
    */
   advertiser?: MDNSAdvertiser;
-  /**
-   * Use the legacy bonjour-hap as advertiser.
-   * @deprecated
-   */
-  useLegacyAdvertiser?: boolean;
 }
 
+/**
+ * @group Accessory
+ */
 export const enum MDNSAdvertiser {
   /**
    * Use the `@homebridge/ciao` module as advertiser.
@@ -281,12 +286,26 @@ export const enum MDNSAdvertiser {
    * Use Avahi/D-Bus as advertiser.
    */
   AVAHI = "avahi",
+  /**
+   * Use systemd-resolved/D-Bus as advertiser.
+   *
+   * Note: The systemd-resolved D-Bus interface doesn't provide means to detect restarts of the service.
+   * Therefore, we can't detect if our advertisement might be lost due to a restart of the systemd-resolved daemon restart.
+   * Consequentially, treat this feature as an experimental feature.
+   */
+  RESOLVED = "resolved",
 }
 
+/**
+ * @group Accessory
+ */
 export type AccessoryCharacteristicChange = ServiceCharacteristicChange &  {
   service: Service;
 };
 
+/**
+ * @group Service
+ */
 export interface ServiceConfigurationChange {
   service: Service;
 }
@@ -297,12 +316,9 @@ const enum WriteRequestState {
   TIMED_WRITE_REJECTED
 }
 
-// noinspection JSUnusedGlobalSymbols
 /**
- * @deprecated Use AccessoryEventTypes instead
+ * @group Accessory
  */
-export type EventAccessory = "identify" | "listening" | "service-configurationChange" | "service-characteristic-change";
-
 export const enum AccessoryEventTypes {
   /**
    * Emitted when an iOS device wishes for this Accessory to identify itself. If `paired` is false, then
@@ -334,6 +350,10 @@ export const enum AccessoryEventTypes {
   CHARACTERISTIC_WARNING = "characteristic-warning",
 }
 
+/**
+ * @group Accessory
+ */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface Accessory {
   on(event: "identify", listener: (paired: boolean, callback: VoidCallback) => void): this;
   on(event: "listening", listener: (port: number, address: string) => void): this;
@@ -369,14 +389,15 @@ export declare interface Accessory {
  * are hosted by the Bridge. This UUID must be "stable" and unchanging, even when the server is restarted. This
  * is required so that the Bridge can provide consistent "Accessory IDs" (aid) and "Instance IDs" (iid) for all
  * Accessories, Services, and Characteristics for iOS clients to reference later.
+ *
+ * @group Accessory
  */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class Accessory extends EventEmitter {
-
-  /**
-   * @deprecated Please use the Categories const enum above.
-   */
-  // @ts-expect-error: forceConsistentCasingInFileNames compiler option
-  static Categories = Categories;
+  // Timeout in milliseconds until a characteristic warning is issue
+  private static readonly TIMEOUT_WARNING = 3000;
+  // Timeout in milliseconds after `TIMEOUT_WARNING` until the operation on the characteristic is considered timed out.
+  private static readonly TIMEOUT_AFTER_WARNING = 6000;
 
   // NOTICE: when adding/changing properties, remember to possibly adjust the serialize/deserialize functions
   aid: Nullable<number> = null; // assigned by us in assignIDs() or by a Bridge
@@ -401,12 +422,33 @@ export class Accessory extends EventEmitter {
   private serializedControllers?: Record<ControllerIdentifier, ControllerServiceMap>; // store uninitialized controller data after a Accessory.deserialize call
   private activeCameraController?: CameraController;
 
+  /**
+   * @private Private API.
+   */
   _accessoryInfo?: Nullable<AccessoryInfo>;
+  /**
+   * @private Private API.
+   */
   _setupID: Nullable<string> = null;
+  /**
+   * @private Private API.
+   */
   _identifierCache?: Nullable<IdentifierCache>;
+  /**
+   * @private Private API.
+   */
   controllerStorage: ControllerStorage = new ControllerStorage(this);
+  /**
+   * @private Private API.
+   */
   _advertiser?: Advertiser;
+  /**
+   * @private Private API.
+   */
   _server?: HAPServer;
+  /**
+   * @private Private API.
+   */
   _setupURI?: string;
 
   private configurationChangeDebounceTimeout?: NodeJS.Timeout;
@@ -424,6 +466,7 @@ export class Accessory extends EventEmitter {
       "valid UUID from any arbitrary string, like a serial number.");
 
     // create our initial "Accessory Information" Service that all Accessories are expected to have
+    checkName(this.displayName, "Name", displayName);
     this.addService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Name, displayName);
 
@@ -452,6 +495,20 @@ export class Accessory extends EventEmitter {
     }
   }
 
+  /**
+   * Add the given service instance to the Accessory.
+   *
+   * @param service - A {@link Service} instance.
+   * @returns Returns the service instance passed to the method call.
+   */
+  public addService(service: Service): Service
+  /**
+   * Adds a given service by calling the provided {@link Service} constructor with the provided constructor arguments.
+   * @param serviceConstructor - A {@link Service} service constructor (e.g. {@link Service.Switch}).
+   * @param constructorArgs - The arguments passed to the given constructor.
+   * @returns Returns the constructed service instance.
+   */
+  public addService<S extends typeof Service>(serviceConstructor: S, ...constructorArgs: ConstructorArgs<S>): Service
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public addService(serviceParam: Service | typeof Service, ...constructorArgs: any[]): Service {
     // service might be a constructor like `Service.AccessoryInformation` instead of an instance
@@ -501,13 +558,6 @@ export class Accessory extends EventEmitter {
     return service;
   }
 
-  /**
-   * @deprecated use {@link Service.setPrimaryService} directly
-   */
-  public setPrimaryService(service: Service): void {
-    service.setPrimaryService();
-  }
-
   public removeService(service: Service): void {
     const index = this.services.indexOf(service);
 
@@ -539,9 +589,11 @@ export class Accessory extends EventEmitter {
     for (const service of this.services) {
       if (typeof name === "string" && (service.displayName === name || service.name === name || service.subtype === name)) {
         return service;
-      // @ts-expect-error: UUID property
-      } else if (typeof name === "function" && ((service instanceof name) || (name.UUID === service.UUID))) {
-        return service;
+      } else {
+        // @ts-expect-error ('UUID' does not exist on type 'never')
+        if (typeof name === "function" && ((service instanceof name) || (name.UUID === service.UUID))) {
+          return service;
+        }
       }
     }
 
@@ -552,9 +604,11 @@ export class Accessory extends EventEmitter {
     for (const service of this.services) {
       if (typeof uuid === "string" && (service.displayName === uuid || service.name === uuid) && service.subtype === subType) {
         return service;
-      // @ts-expect-error: UUID property
-      } else if (typeof uuid === "function" && ((service instanceof uuid) || (uuid.UUID === service.UUID)) && service.subtype === subType) {
-        return service;
+      } else {
+        // @ts-expect-error ('UUID' does not exist on type 'never')
+        if (typeof uuid === "function" && ((service instanceof uuid) || (uuid.UUID === service.UUID)) && service.subtype === subType) {
+          return service;
+        }
       }
     }
 
@@ -563,7 +617,7 @@ export class Accessory extends EventEmitter {
 
   /**
    * Returns the bridging accessory if this accessory is bridged.
-   * Otherwise returns itself.
+   * Otherwise, returns itself.
    *
    * @returns the primary accessory
    */
@@ -571,28 +625,18 @@ export class Accessory extends EventEmitter {
     return this.bridged? this.bridge!: this;
   };
 
-  /**
-   * @deprecated Not supported anymore
-   */
-  public updateReachability(reachable: boolean): void {
-    if (!this.bridged) {
-      throw new Error("Cannot update reachability on non-bridged accessory!");
-    }
-    this.reachable = reachable;
-
-    debug("Reachability update is no longer being supported.");
-  }
-
   public addBridgedAccessory(accessory: Accessory, deferUpdate = false): Accessory {
-    if (accessory._isBridge) {
-      throw new Error("Cannot Bridge another Bridge!");
+    if (accessory._isBridge || accessory === this) {
+      throw new Error("Illegal state: either trying to bridge a bridge or trying to bridge itself!");
     }
 
-    // check for UUID conflict
-    for (const existing of this.bridgedAccessories) {
-      if (existing.UUID === accessory.UUID) {
-        throw new Error("Cannot add a bridged Accessory with the same UUID as another bridged Accessory: " + existing.UUID);
-      }
+    if (accessory.initialized) {
+      throw new Error("Tried to bridge an accessory which was already published once!");
+    }
+
+    if (accessory.bridge != null) {
+      // this also prevents that we bridge the same accessory twice!
+      throw new Error("Tried to bridge " + accessory.displayName + " while it was already bridged by " + accessory.bridge.displayName);
     }
 
     if (this.bridgedAccessories.length >= MAX_ACCESSORIES) {
@@ -626,22 +670,17 @@ export class Accessory extends EventEmitter {
     this.enqueueConfigurationUpdate();
   }
 
-  public removeBridgedAccessory(accessory: Accessory, deferUpdate: boolean): void {
-    if (accessory._isBridge) {
-      throw new Error("Cannot Bridge another Bridge!");
-    }
-
+  public removeBridgedAccessory(accessory: Accessory, deferUpdate = false): void {
     // check for UUID conflict
-    const foundMatchAccessory = this.bridgedAccessories.findIndex((existing) => {
-      return existing.UUID === accessory.UUID;
-    });
-
-    if (foundMatchAccessory === -1) {
+    const accessoryIndex = this.bridgedAccessories.indexOf(accessory);
+    if (accessoryIndex === -1) {
       throw new Error("Cannot find the bridged Accessory to remove.");
     }
 
-    this.bridgedAccessories.splice(foundMatchAccessory, 1);
+    this.bridgedAccessories.splice(accessoryIndex, 1);
 
+    accessory.bridged = false;
+    accessory.bridge = undefined;
     accessory.removeAllListeners();
 
     if(!deferUpdate) {
@@ -675,17 +714,11 @@ export class Accessory extends EventEmitter {
   }
 
   protected getAccessoryByAID(aid: number): Accessory | undefined {
-    if (aid === 1) {
+    if (this.aid === aid) {
       return this;
     }
 
-    for (const accessory of this.bridgedAccessories) {
-      if (accessory.aid === aid) {
-        return accessory;
-      }
-    }
-
-    return undefined;
+    return this.bridgedAccessories.find(value => value.aid === aid);
   }
 
   protected findCharacteristic(aid: number, iid: number): Characteristic | undefined {
@@ -693,65 +726,8 @@ export class Accessory extends EventEmitter {
     return accessory && accessory.getCharacteristicByIID(iid);
   }
 
-  // noinspection JSDeprecatedSymbols
   /**
-   * Method is used to configure an old style CameraSource.
-   * The CameraSource API was fully replaced by the new Controller API used by {@link CameraController}.
-   * The {@link CameraStreamingDelegate} used by the CameraController is the equivalent to the old CameraSource.
-   *
-   * The new Controller API is much more refined and robust way of "grouping" services together.
-   * It especially is intended to fully support serialization/deserialization to/from persistent storage.
-   * This feature is also gained when using the old style CameraSource API.
-   * The {@link CameraStreamingDelegate} improves on the overall camera API though and provides some reworked
-   * type definitions and a refined callback interface to better signal errors to the requesting HomeKit device.
-   * It is advised to update to it.
-   *
-   * Full backwards compatibility is currently maintained. A legacy CameraSource will be wrapped into an Adapter.
-   * All legacy StreamControllers in the "streamControllers" property will be replaced by CameraRTPManagement instances.
-   * Any services in the "services" property which are one of the following are ignored:
-   *     - CameraRTPStreamManagement
-   *     - CameraOperatingMode
-   *     - CameraEventRecordingManagement
-   *
-   * @param cameraSource {LegacyCameraSource}
-   * @deprecated please refer to the new {@see CameraController} API and {@link configureController}
-   */
-  public configureCameraSource(cameraSource: LegacyCameraSource): CameraController {
-    if (cameraSource.streamControllers.length === 0) {
-      throw new Error("Malformed legacy CameraSource. Did not expose any StreamControllers!");
-    }
-
-    const options = cameraSource.streamControllers[0].options; // grab options from one of the StreamControllers
-    const cameraControllerOptions: CameraControllerOptions = { // build new options set
-      cameraStreamCount: cameraSource.streamControllers.length,
-      streamingOptions: options,
-      delegate: new LegacyCameraSourceAdapter(cameraSource),
-    };
-
-    const cameraController = new CameraController(cameraControllerOptions, true); // create CameraController in legacy mode
-    this.configureController(cameraController);
-
-    // we try here to be as good as possibly of keeping current behaviour
-    cameraSource.services.forEach(service => {
-      if (service.UUID === Service.CameraRTPStreamManagement.UUID || service.UUID === Service.CameraOperatingMode.UUID
-          || service.UUID === Service.CameraRecordingManagement.UUID) {
-        return; // ignore those services, as they get replaced by the RTPStreamManagement
-      }
-
-      // all other services get added. We can't really control possibly linking to any of those ignored services
-      // so this is really only half-baked stuff.
-      this.addService(service);
-    });
-
-    // replace stream controllers; basically only to still support the "forceStop" call
-    // noinspection JSDeprecatedSymbols
-    cameraSource.streamControllers = cameraController.streamManagements as StreamController[];
-
-    return cameraController; // return the reference for the controller (maybe this could be useful?)
-  }
-
-  /**
-   * This method is used to setup a new Controller for this accessory. See {@see Controller} for a more detailed
+   * This method is used to set up a new Controller for this accessory. See {@link Controller} for a more detailed
    * explanation what a Controller is and what it is capable of.
    *
    * The controller can be passed as an instance of the class or as a constructor (without any necessary parameters)
@@ -759,10 +735,10 @@ export class Accessory extends EventEmitter {
    * Only one Controller of a given {@link ControllerIdentifier} can be configured for a given Accessory.
    *
    * When called, it will be checked if there are any services and persistent data the Controller (for the given
-   * {@link ControllerIdentifier}) can be restored from. Otherwise the Controller will be created with new services.
+   * {@link ControllerIdentifier}) can be restored from. Otherwise, the Controller will be created with new services.
    *
    *
-   * @param controllerConstructor {Controller | ControllerConstructor}
+   * @param controllerConstructor - The Controller instance or constructor to the Controller with no required arguments.
    */
   public configureController(controllerConstructor: Controller | ControllerConstructor): void {
     const controller = typeof controllerConstructor === "function"
@@ -837,7 +813,7 @@ export class Accessory extends EventEmitter {
     if (storedController) {
       if (storedController.controller !== controller) {
         throw new Error("[" + this.displayName + "] tried removing a controller with the id/type '" + id +
-          "' though provided controller isn't the same which is registered!");
+          "' though provided controller isn't the same instance that is registered!");
       }
 
       if (isSerializableController(controller)) {
@@ -889,8 +865,8 @@ export class Accessory extends EventEmitter {
       const updatedService = updatedServiceMap[name];
 
       if (service && updatedService) { // we check all names contained in both ServiceMaps for changes
-        delete originalServiceMap[name]; // delete from original ServiceMap so it will only contain deleted services at the end
-        delete updatedServiceMap[name]; // delete from updated ServiceMap so it will only contain added services at the end
+        delete originalServiceMap[name]; // delete from original ServiceMap, so it will only contain deleted services at the end
+        delete updatedServiceMap[name]; // delete from updated ServiceMap, so it will only contain added services at the end
 
         if (service !== updatedService) {
           this.removeService(service);
@@ -918,23 +894,23 @@ export class Accessory extends EventEmitter {
       return this._setupURI;
     }
 
-    const buffer = Buffer.alloc(8);
-    const setupCode = this._accessoryInfo && parseInt(this._accessoryInfo.pincode.replace(/-/g, ""), 10);
+    assert(!!this._accessoryInfo, "Cannot generate setupURI on an accessory that isn't published yet!");
 
-    let value_low = setupCode!;
-    const value_high = this._accessoryInfo && this._accessoryInfo.category >> 1;
+    const buffer = Buffer.alloc(8);
+    let value_low = parseInt(this._accessoryInfo.pincode.replace(/-/g, ""), 10);
+    const value_high = this._accessoryInfo.category >> 1;
 
     value_low |= 1 << 28; // Supports IP;
 
     buffer.writeUInt32BE(value_low, 4);
 
-    if (this._accessoryInfo && this._accessoryInfo.category & 1) {
+    if (this._accessoryInfo.category & 1) {
       buffer[4] = buffer[4] | 1 << 7;
     }
 
-    buffer.writeUInt32BE(value_high!, 0);
+    buffer.writeUInt32BE(value_high, 0);
 
-    let encodedPayload = (buffer.readUInt32BE(4) + (buffer.readUInt32BE(0) * Math.pow(2, 32))).toString(36).toUpperCase();
+    let encodedPayload = (buffer.readUInt32BE(4) + (buffer.readUInt32BE(0) * 0x100000000)).toString(36).toUpperCase();
 
     if (encodedPayload.length !== 9) {
       for (let i = 0; i <= 9 - encodedPayload.length; i++) {
@@ -966,15 +942,12 @@ export class Accessory extends EventEmitter {
         }
       };
 
-      const model = service.getCharacteristic(Characteristic.Model).value;
-      const serialNumber = service.getCharacteristic(Characteristic.SerialNumber).value;
-      const firmwareRevision = service.getCharacteristic(Characteristic.FirmwareRevision).value;
-      const name = service.getCharacteristic(Characteristic.Name).value;
-
-      checkValue("Model", model);
-      checkValue("SerialNumber", serialNumber);
-      checkValue("FirmwareRevision", firmwareRevision);
-      checkValue("Name", name);
+      checkName(this.displayName, "Name", service.getCharacteristic(Characteristic.Name).value);
+      checkValue("FirmwareRevision", service.getCharacteristic(Characteristic.FirmwareRevision).value);
+      checkValue("Manufacturer", service.getCharacteristic(Characteristic.Manufacturer).value);
+      checkValue("Model", service.getCharacteristic(Characteristic.Model).value);
+      checkValue("Name", service.getCharacteristic(Characteristic.Name).value);
+      checkValue("SerialNumber", service.getCharacteristic(Characteristic.SerialNumber).value);
     }
 
     if (mainAccessory) {
@@ -990,6 +963,7 @@ export class Accessory extends EventEmitter {
   /**
    * Assigns aid/iid to ourselves, any Accessories we are bridging, and all associated Services+Characteristics. Uses
    * the provided identifierCache to keep IDs stable.
+   * @private Private API
    */
   _assignIDs(identifierCache: IdentifierCache): void {
 
@@ -1044,7 +1018,7 @@ export class Accessory extends EventEmitter {
 
   /**
    * Manually purge the unused ids if you like, comes handy
-   * when you have disabled auto purge so you can do it manually
+   * when you have disabled auto purge, so you can do it manually
    */
   purgeUnusedIDs(): void {
     //Cache the state of the purge mechanism and set it to true
@@ -1109,33 +1083,25 @@ export class Accessory extends EventEmitter {
   }
 
   /**
-   * Publishes this Accessory on the local network for iOS clients to communicate with.
-   *
-   * @param {Object} info - Required info for publishing.
-   * @param allowInsecureRequest - Will allow unencrypted and unauthenticated access to the http server
-   * @param {string} info.username - The "username" (formatted as a MAC address - like "CC:22:3D:E3:CE:F6") of
-   *                                this Accessory. Must be globally unique from all Accessories on your local network.
-   * @param {string} info.pincode - The 8-digit pincode for clients to use when pairing this Accessory. Must be formatted
-   *                               as a string like "031-45-154".
-   * @param {string} info.category - One of the values of the Accessory.Category enum, like Accessory.Category.SWITCH.
-   *                                This is a hint to iOS clients about what "type" of Accessory this represents, so
-   *                                that for instance an appropriate icon can be drawn for the user while adding a
-   *                                new Accessory.
+   * Publishes this accessory on the local network for iOS clients to communicate with.
+   * - `info.username` - formatted as a MAC address, like `CC:22:3D:E3:CE:F6`, of this accessory.
+   *   Must be globally unique from all Accessories on your local network.
+   * - `info.pincode` - the 8-digit pin code for clients to use when pairing this Accessory.
+   *   Must be formatted as a string like `031-45-154`.
+   * - `info.category` - one of the values of the `Accessory.Category` enum, like `Accessory.Category.SWITCH`.
+   *   This is a hint to iOS clients about what "type" of Accessory this represents, so
+   *   that for instance an appropriate icon can be drawn for the user while adding a
+   *   new Accessory.
+   * @param {{
+   *   username: string;
+   *   pincode: string;
+   *   category: Accessory.Categories;
+   * }} info - Required info for publishing.
+   * @param {boolean} allowInsecureRequest - Will allow unencrypted and unauthenticated access to the http server
    */
   public async publish(info: PublishInfo, allowInsecureRequest?: boolean): Promise<void> {
-    // noinspection JSDeprecatedSymbols
-    if (!info.advertiser && info.useLegacyAdvertiser != null) {
-      // noinspection JSDeprecatedSymbols
-      info.advertiser = info.useLegacyAdvertiser? MDNSAdvertiser.BONJOUR: MDNSAdvertiser.CIAO;
-      console.warn("DEPRECATED The PublishInfo.useLegacyAdvertiser option has been removed. " +
-        "Please use the PublishInfo.advertiser property to enable \"ciao\" (useLegacyAdvertiser=false) " +
-        "or \"bonjour-hap\" (useLegacyAdvertiser=true) mdns advertiser libraries!");
-    }
-
-    // noinspection JSDeprecatedSymbols
-    if (info.mdns && info.advertiser !== MDNSAdvertiser.BONJOUR) {
-      console.log("DEPRECATED user supplied a custom 'mdns' option. This option is deprecated and ignored. " +
-        "Please move to the new 'bind' option.");
+    if (this.bridged) {
+      throw new Error("Can't publish in accessory which is bridged by another accessory. Bridged by " + this.bridge?.displayName);
     }
 
     let service = this.getService(Service.ProtocolInformation);
@@ -1149,7 +1115,7 @@ export class Accessory extends EventEmitter {
     }
 
     if (!this.initialized && (info.addIdentifyingMaterial ?? true)) {
-      // adding some identifying material to our displayName if its our first publish() call
+      // adding some identifying material to our displayName if it's our first publish() call
       this.displayName = this.displayName + " " + crypto.createHash("sha512")
         .update(info.username, "utf8")
         .digest("hex").slice(0, 4).toUpperCase();
@@ -1182,7 +1148,7 @@ export class Accessory extends EventEmitter {
     this._accessoryInfo.pincode = info.pincode;
     this._accessoryInfo.save();
 
-    // create our IdentifierCache so we can provide clients with stable aid/iid's
+    // create our IdentifierCache, so we can provide clients with stable aid/iid's
     this._identifierCache = IdentifierCache.load(info.username);
 
     // if we don't have one, create a new one.
@@ -1191,10 +1157,10 @@ export class Accessory extends EventEmitter {
       this._identifierCache = new IdentifierCache(info.username);
     }
 
-    //If it's bridge and there are not accessories already assigned to the bridge
-    //probably purge is not needed since it's going to delete all the ids
-    //of accessories that might be added later. Useful when dynamically adding
-    //accessories.
+    // If it's bridge and there are no accessories already assigned to the bridge
+    // probably purge is not needed since it's going to delete all the ids
+    // of accessories that might be added later. Useful when dynamically adding
+    // accessories.
     if (this._isBridge && this.bridgedAccessories.length === 0) {
       this.disableUnusedIDPurge();
       this.controllerStorage.purgeUnidentifiedAccessoryData = false;
@@ -1220,16 +1186,19 @@ export class Accessory extends EventEmitter {
     // create our Advertiser which broadcasts our presence over mdns
     const parsed = Accessory.parseBindOption(info);
 
-    let selectedAdvertiser = info.advertiser ?? MDNSAdvertiser.BONJOUR;
-    if (info.advertiser === MDNSAdvertiser.AVAHI && !await AvahiAdvertiser.isAvailable()) {
+    info.advertiser ??= MDNSAdvertiser.CIAO;
+    if (
+      (info.advertiser === MDNSAdvertiser.AVAHI && !await AvahiAdvertiser.isAvailable()) ||
+      (info.advertiser === MDNSAdvertiser.RESOLVED && !await ResolvedAdvertiser.isAvailable())
+    ) {
       console.error(
-        `[${this.displayName}] The selected advertiser, "${MDNSAdvertiser.AVAHI}", isn't available on this platform. ` +
-        `Reverting to "${MDNSAdvertiser.BONJOUR}"`,
+        `[${this.displayName}] The selected advertiser, "${info.advertiser}", isn't available on this platform. ` +
+        `Reverting to "${MDNSAdvertiser.CIAO}"`,
       );
-      selectedAdvertiser = MDNSAdvertiser.BONJOUR;
+      info.advertiser = MDNSAdvertiser.CIAO;
     }
 
-    switch (selectedAdvertiser) {
+    switch (info.advertiser) {
     case MDNSAdvertiser.CIAO:
       this._advertiser = new CiaoAdvertiser(this._accessoryInfo, {
         interface: parsed.advertiserAddress,
@@ -1239,14 +1208,16 @@ export class Accessory extends EventEmitter {
       });
       break;
     case MDNSAdvertiser.BONJOUR:
-      // noinspection JSDeprecatedSymbols
-      this._advertiser = new BonjourHAPAdvertiser(this._accessoryInfo, info.mdns, {
+      this._advertiser = new BonjourHAPAdvertiser(this._accessoryInfo, {
         restrictedAddresses: parsed.serviceRestrictedAddress,
         disabledIpv6: parsed.serviceDisableIpv6,
       });
       break;
     case MDNSAdvertiser.AVAHI:
       this._advertiser = new AvahiAdvertiser(this._accessoryInfo);
+      break;
+    case MDNSAdvertiser.RESOLVED:
+      this._advertiser = new ResolvedAdvertiser(this._accessoryInfo);
       break;
     default:
       throw new Error("Unsupported advertiser setting: '" + info.advertiser + "'");
@@ -1334,8 +1305,8 @@ export class Accessory extends EventEmitter {
       }
     }, 1000);
     this.configurationChangeDebounceTimeout.unref();
-    // 1d is fine, HomeKit is built that with configuration updates no iid or aid conflicts occur.
-    // Thus the only thing happening when the txt update arrives late is already removed accessories/services
+    // 1s is fine, HomeKit is built that with configuration updates no iid or aid conflicts occur.
+    // Thus, the only thing happening when the txt update arrives late is already removed accessories/services
     // not responding or new accessories/services not yet shown
   }
 
@@ -1346,7 +1317,12 @@ export class Accessory extends EventEmitter {
 
     this._advertiser!.startAdvertising()
       .then(() => this.emit(AccessoryEventTypes.ADVERTISED))
-      .catch(reason => console.error("Could not create mDNS advertisement. The HAP-Server won't be discoverable: " + reason));
+      .catch(reason => {
+        console.error("Could not create mDNS advertisement. The HAP-Server won't be discoverable: " + reason);
+        if (reason.stack) {
+          debug("Detailed error: " + reason.stack);
+        }
+      });
 
     this.emit(AccessoryEventTypes.LISTENING, port, hostname);
   }
@@ -1354,11 +1330,15 @@ export class Accessory extends EventEmitter {
   private handleInitialPairSetupFinished(username: string, publicKey: Buffer, callback: PairCallback): void {
     debug("[%s] Paired with client %s", this.displayName, username);
 
-    this._accessoryInfo && this._accessoryInfo.addPairedClient(username, publicKey, PermissionTypes.ADMIN);
-    this._accessoryInfo && this._accessoryInfo.save();
+    if (this._accessoryInfo) {
+      this._accessoryInfo.addPairedClient(username, publicKey, PermissionTypes.ADMIN);
+      this._accessoryInfo.save();
+    }
 
-    // update our advertisement so it can pick up on the paired status of AccessoryInfo
-    this._advertiser && this._advertiser.updateAdvertisement();
+    // update our advertisement, so it can pick up on the paired status of AccessoryInfo
+    if (this._advertiser) {
+      this._advertiser.updateAdvertisement();
+    }
 
     callback();
 
@@ -1410,7 +1390,9 @@ export class Accessory extends EventEmitter {
     callback(0); // first of all ensure the pairing is removed before we advertise availability again
 
     if (!this._accessoryInfo.paired()) {
-      this._advertiser && this._advertiser.updateAdvertisement();
+      if (this._advertiser) {
+        this._advertiser.updateAdvertisement();
+      }
       this.emit(AccessoryEventTypes.UNPAIRED);
 
       this.handleAccessoryUnpairedForControllers();
@@ -1438,7 +1420,7 @@ export class Accessory extends EventEmitter {
     this._assignIDs(this._identifierCache!); // make sure our aid/iid's are all assigned
 
     const now = Date.now();
-    const contactGetHandlers = now - this.lastAccessoriesRequest > 5_000; // we query latest value if last /accessories was more than 5s ago
+    const contactGetHandlers = now - this.lastAccessoriesRequest > 5_000; // we query the latest value if last /accessories was more than 5s ago
     this.lastAccessoriesRequest = now;
 
     this.toHAP(connection, contactGetHandlers).then(value => {
@@ -1474,7 +1456,7 @@ export class Accessory extends EventEmitter {
           characteristic.displayName + "' on the accessory '" + accessory.displayName + "' was slow to respond!");
       }
 
-      // after a total of 10s we do not longer wait for a request to appear and just return status code timeout
+      // after a total of 10s we do no longer wait for a request to appear and just return status code timeout
       timeout = setTimeout(() => {
         timeout = undefined;
 
@@ -1498,9 +1480,9 @@ export class Accessory extends EventEmitter {
         missingCharacteristics.clear();
 
         callback(undefined, response);
-      }, 6000);
+      }, Accessory.TIMEOUT_AFTER_WARNING);
       timeout.unref();
-    }, 3000);
+    }, Accessory.TIMEOUT_WARNING);
     timeout.unref();
 
     for (const id of request.ids) {
@@ -1556,9 +1538,8 @@ export class Accessory extends EventEmitter {
     }
 
     if (characteristic.props.adminOnlyAccess && characteristic.props.adminOnlyAccess.includes(Access.READ)) {
-      let verifiable = true;
-      if (!connection.username || !this._accessoryInfo) {
-        verifiable = false;
+      const verifiable = this._accessoryInfo && connection.username;
+      if (!verifiable) {
         debug("[%s] Could not verify admin permissions for Characteristic which requires admin permissions for reading (aid of %s and iid of %s)",
           this.displayName, id.aid, id.iid);
       }
@@ -1588,7 +1569,7 @@ export class Accessory extends EventEmitter {
         data.perms = characteristic.props.perms;
       }
       if (request.includeType) {
-        data.type = toShortForm(this.UUID);
+        data.type = toShortForm(characteristic.UUID);
       }
       if (request.includeEvent) {
         data.ev = connection.hasEventNotifications(id.aid, id.iid);
@@ -1596,7 +1577,7 @@ export class Accessory extends EventEmitter {
 
       return data;
     }, (reason: HAPStatus) => {
-      // @ts-expect-error: forceConsistentCasingInFileNames compiler option
+      // @ts-expect-error: preserveConstEnums compiler option
       debug("[%s] Error getting value for characteristic \"%s\": %s", this.displayName, characteristic.displayName, HAPStatus[reason]);
       return { status: reason };
     });
@@ -1645,7 +1626,7 @@ export class Accessory extends EventEmitter {
           characteristic.displayName + "' on the accessory '" + accessory.displayName + "' was slow to respond!");
       }
 
-      // after a total of 10s we do not longer wait for a request to appear and just return status code timeout
+      // after a total of 10s we do no longer wait for a request to appear and just return status code timeout
       timeout = setTimeout(() => {
         timeout = undefined;
 
@@ -1669,9 +1650,9 @@ export class Accessory extends EventEmitter {
         missingCharacteristics.clear();
 
         callback(undefined, response);
-      }, 6000);
+      }, Accessory.TIMEOUT_AFTER_WARNING);
       timeout.unref();
-    }, 3000);
+    }, Accessory.TIMEOUT_WARNING);
     timeout.unref();
 
     for (const data of writeRequest.characteristics) {
@@ -1715,7 +1696,6 @@ export class Accessory extends EventEmitter {
     writeState: WriteRequestState,
   ): Promise<PartialCharacteristicWriteData> {
     const characteristic = this.findCharacteristic(data.aid, data.iid);
-    let evResponse: boolean | undefined = undefined;
 
     if (!characteristic) {
       debug("[%s] Could not find a Characteristic with aid of %s and iid of %s", this.displayName, data.aid, data.iid);
@@ -1726,44 +1706,40 @@ export class Accessory extends EventEmitter {
       return { status: HAPStatus.INVALID_VALUE_IN_REQUEST };
     }
 
+    if (data.ev == null && data.value == null) {
+      return { status: HAPStatus.INVALID_VALUE_IN_REQUEST };
+    }
+
     if (data.ev != null) { // register/unregister event notifications
-      const notificationsEnabled = connection.hasEventNotifications(data.aid, data.iid);
+      if (!characteristic.props.perms.includes(Perms.NOTIFY)) { // check if notify is allowed for this characteristic
+        debug("[%s] Tried %s notifications for Characteristic which does not allow notify (aid of %s and iid of %s)",
+          this.displayName, data.ev? "enabling": "disabling", data.aid, data.iid);
+        return { status: HAPStatus.NOTIFICATION_NOT_SUPPORTED };
+      }
 
-      // it seems like the Home App sends unregister requests for characteristics which don't have notify permissions
-      // see https://github.com/homebridge/HAP-NodeJS/issues/868
-      if (notificationsEnabled !== data.ev) {
-        if (!characteristic.props.perms.includes(Perms.NOTIFY)) { // check if notify is allowed for this characteristic
-          debug("[%s] Tried %s notifications for Characteristic which does not allow notify (aid of %s and iid of %s)",
-            this.displayName, data.ev? "enabling": "disabling", data.aid, data.iid);
-          return { status: HAPStatus.NOTIFICATION_NOT_SUPPORTED };
+      if (characteristic.props.adminOnlyAccess && characteristic.props.adminOnlyAccess.includes(Access.NOTIFY)) {
+        const verifiable = connection.username && this._accessoryInfo;
+        if (!verifiable) {
+          debug("[%s] Could not verify admin permissions for Characteristic which requires admin permissions for notify (aid of %s and iid of %s)",
+            this.displayName, data.aid, data.iid);
         }
 
-        if (characteristic.props.adminOnlyAccess && characteristic.props.adminOnlyAccess.includes(Access.NOTIFY)) {
-          let verifiable = true;
-          if (!connection.username || !this._accessoryInfo) {
-            verifiable = false;
-            debug("[%s] Could not verify admin permissions for Characteristic which requires admin permissions for notify (aid of %s and iid of %s)",
-              this.displayName, data.aid, data.iid);
-          }
-
-          if (!verifiable || !this._accessoryInfo!.hasAdminPermissions(connection.username!)) {
-            return { status: HAPStatus.INSUFFICIENT_PRIVILEGES };
-          }
-        }
-
-        // we already checked that data.ev != notificationsEnabled, thus just do whatever the connection asks for
-        if (data.ev) {
-          connection.enableEventNotifications(data.aid, data.iid);
-          characteristic.subscribe();
-          evResponse = true;
-          debug("[%s] Registered Characteristic \"%s\" on \"%s\" for events", connection.remoteAddress, characteristic.displayName, this.displayName);
-        } else {
-          characteristic.unsubscribe();
-          connection.disableEventNotifications(data.aid, data.iid);
-          evResponse = false;
-          debug("[%s] Unregistered Characteristic \"%s\" on \"%s\" for events", connection.remoteAddress, characteristic.displayName, this.displayName);
+        if (!verifiable || !this._accessoryInfo!.hasAdminPermissions(connection.username!)) {
+          return { status: HAPStatus.INSUFFICIENT_PRIVILEGES };
         }
       }
+
+      const notificationsEnabled = connection.hasEventNotifications(data.aid, data.iid);
+      if (data.ev && !notificationsEnabled) {
+        connection.enableEventNotifications(data.aid, data.iid);
+        characteristic.subscribe();
+        debug("[%s] Registered Characteristic \"%s\" on \"%s\" for events", connection.remoteAddress, characteristic.displayName, this.displayName);
+      } else if (!data.ev && notificationsEnabled) {
+        characteristic.unsubscribe();
+        connection.disableEventNotifications(data.aid, data.iid);
+        debug("[%s] Unregistered Characteristic \"%s\" on \"%s\" for events", connection.remoteAddress, characteristic.displayName, this.displayName);
+      }
+
       // response is returned below in the else block
     }
 
@@ -1774,9 +1750,8 @@ export class Accessory extends EventEmitter {
       }
 
       if (characteristic.props.adminOnlyAccess && characteristic.props.adminOnlyAccess.includes(Access.WRITE)) {
-        let verifiable = true;
-        if (!connection.username || !this._accessoryInfo) {
-          verifiable = false;
+        const verifiable = connection.username && this._accessoryInfo;
+        if (!verifiable) {
           debug("[%s] Could not verify admin permissions for Characteristic which requires admin permissions for write (aid of %s and iid of %s)",
             this.displayName, data.aid, data.iid);
         }
@@ -1815,7 +1790,7 @@ export class Accessory extends EventEmitter {
           // if write response is requests and value is provided, return that
           value: data.r && value? formatOutgoingCharacteristicValue(value, characteristic.props): undefined,
 
-          ev: evResponse,
+          status: HAPStatus.SUCCESS,
         };
       }, (status: HAPStatus) => {
         // @ts-expect-error: forceConsistentCasingInFileNames compiler option
@@ -1823,9 +1798,9 @@ export class Accessory extends EventEmitter {
 
         return { status: status };
       });
-    } else {
-      return { ev: evResponse };
     }
+
+    return { status: HAPStatus.SUCCESS };
   }
 
   private handleResource(data: ResourceRequest, callback: ResourceRequestCallback): void {
@@ -1866,10 +1841,6 @@ export class Accessory extends EventEmitter {
   }
 
   private handleHAPConnectionClosed(connection: HAPConnection): void {
-    if (this.activeCameraController) {
-      this.activeCameraController.handleCloseConnection(connection.sessionID);
-    }
-
     for (const event of connection.getRegisteredEvents()) {
       const ids = event.split(".");
       const aid = parseInt(ids[0], 10);
@@ -1885,10 +1856,10 @@ export class Accessory extends EventEmitter {
 
   private handleServiceConfigurationChangeEvent(service: Service): void {
     if (!service.isPrimaryService && service === this.primaryService) {
-      // service changed form primary to non primary service
+      // service changed form primary to non-primary service
       this.primaryService = undefined;
     } else if (service.isPrimaryService && service !== this.primaryService) {
-      // service changed from non primary to primary service
+      // service changed from non-primary to primary service
       if (this.primaryService !== undefined) {
         this.primaryService.isPrimaryService = false;
       }
@@ -2047,12 +2018,14 @@ export class Accessory extends EventEmitter {
     });
 
     // also save controller which didn't get initialized (could lead to service duplication if we throw that data away)
-    accessory.serializedControllers && Object.entries(accessory.serializedControllers).forEach(([id, serviceMap]) => {
-      controllers.push({
-        type: id,
-        services: Accessory.serializeServiceMap(serviceMap),
+    if (accessory.serializedControllers) {
+      Object.entries(accessory.serializedControllers).forEach(([id, serviceMap]) => {
+        controllers.push({
+          type: id,
+          services: Accessory.serializeServiceMap(serviceMap),
+        });
       });
-    });
+    }
 
     if (controllers.length > 0) {
       json.controllers = controllers;
@@ -2148,7 +2121,7 @@ export class Accessory extends EventEmitter {
     serverAddress?: string,
   } {
     let advertiserAddress: string[] | undefined = undefined;
-    let disableIpv6 = false;
+    let disableIpv6: boolean | undefined = undefined;
     let serverAddress: string | undefined = undefined;
 
     if (info.bind) {
@@ -2174,7 +2147,7 @@ export class Accessory extends EventEmitter {
 
         const entry = entries.values().next().value; // grab the first one
 
-        const version = net.isIP(entry); // check if ip address was specified or a interface name
+        const version = net.isIP(entry!); // check if ip address was specified or an interface name
         if (version) {
           serverAddress = version === 4? "0.0.0.0": "::"; // we currently bind to unspecified addresses so config-ui always has a connection via loopback
         } else {
